@@ -25,7 +25,7 @@ class SmtpMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "1.2"
+    plugin_version = "1.0"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
