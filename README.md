@@ -1,6 +1,6 @@
 # MoviePilot-Plugin-Market
 
-MoviePilot三方插件市场：https://github.com/Aqrk/MoviePilot-Plugins/
+MoviePilot三方插件市场：https://github.com/Aqr-k/MoviePilot-Plugins/
 
 # 保持插件最新
 
