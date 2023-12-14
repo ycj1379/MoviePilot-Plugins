@@ -11,11 +11,9 @@ from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas.types import EventType, NotificationType
 
+
 # cp -r /config/smtpmsg /app/app/plugins
 # rm -rf /app/app/plugins/smtpmsg
-# cp -a /config/smtp.png /public/plugin
-# pip install -r requirements.txt
-
 
 class SmtpMsg(_PluginBase):
     # 插件名称
@@ -25,7 +23,7 @@ class SmtpMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "1.0"
+    plugin_version = "1.1"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -40,15 +38,12 @@ class SmtpMsg(_PluginBase):
     # 私有属性
     # 插件开关
     _enabled = False
+    # 发送图片开关
+    _image_send = False
     # 备用服务器开关
     _secondary = False
     # 发送测试消息
     _test = False
-
-    """
-     # 调试开关
-     _debug = False
-     """
 
     # 主服务器-地址/端口/加密方式
     _main_smtp_host = None
@@ -78,16 +73,12 @@ class SmtpMsg(_PluginBase):
         if config:
             # 插件开关
             self._enabled = config.get("enabled")
+            # 发送图片开关
+            self._image_send = config.get("image_send")
             # 备用服务器开关
             self._secondary = config.get("secondary")
             # 测试开关
             self._test = config.get("test")
-            # self._test = False
-
-            """
-            # debug开关
-            self._debug = config.get("debug")
-            """
 
             # 主服务器-地址/端口/加密方式
             self._main_smtp_host = config.get("main_smtp_host")
@@ -123,17 +114,15 @@ class SmtpMsg(_PluginBase):
             self._enabled = False
             logger.warn(f"{self.plugin_name} 基础参数配置不完整，关闭插件")
 
+        # 开始发送测试
         if self._test and self._enabled:
-            logger.info("发送测试邮件")
-            self.send_msg_to_main_smtp(title="测试服务器配置",
-                                       text="这是一封测试邮件~~~",
-                                       image="/public/plugin_icon/Synomail_A.png")
-            if self._secondary:
-                self.send_msg_to_secondary_smtp(title="测试备用服务器配置",
-                                                text="这是一封测试邮件~~~",
-                                                image="/public/plugin_icon/Synomail_A.png")
-            self._test = False
+            self.send_msg_build(title="",
+                                text="这是一封测试邮件~~~",
+                                image="/public/plugin_icon/Synomail_A.png",
+                                test=True)
 
+            # 关闭测试开关
+            self._test = False
             self.update_config({
                 # 测试开关
                 "test": False,
@@ -141,6 +130,8 @@ class SmtpMsg(_PluginBase):
                 "enabled": self._enabled,
                 # 备用服务器开关
                 "secondary": self._secondary,
+                # 发送图片开关
+                "image_send": self._image_send,
 
                 # 主服务器-地址/端口/加密方式
                 "main_smtp_host": self._main_smtp_host,
@@ -167,14 +158,13 @@ class SmtpMsg(_PluginBase):
             })
 
     def get_state(self) -> bool:
-        return self._enabled and (True
-                                  if self._main_smtp_host and
-                                     self._main_smtp_port and
-                                     self._main_smtp_encryption and
-                                     self._main_sender_mail and
-                                     self._main_sender_password and
-                                     self._receiver_mail
-                                  else False)
+        return self._enabled and all([self._main_smtp_host,
+                                      self._main_smtp_port,
+                                      self._main_smtp_encryption,
+                                      self._main_sender_mail,
+                                      self._main_sender_password,
+                                      self._receiver_mail
+                                      ])
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
@@ -216,6 +206,22 @@ class SmtpMsg(_PluginBase):
                                         'props': {
                                             'model': 'enabled',
                                             'label': '启用插件',
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 3
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'image_send',
+                                            'label': '发送图片',
                                         }
                                     }
                                 ]
@@ -520,6 +526,28 @@ class SmtpMsg(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
+                                            'text': '打开 "发送图片" 后，如果消息中有图片，则会添加到邮件正文中并发送；没有图片，则发送文本通知内容'
+                                                    '关闭 "发送图片" 后，则只会发送文本通知内容'
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'info',
+                                            'variant': 'tonal',
                                             'text': '打开 "启动备用服务器" 后，会在 "服务器" 发送失败时，尝试使用 "备用服务器" 发送消息'
                                         }
                                     }
@@ -577,6 +605,8 @@ class SmtpMsg(_PluginBase):
         ], {
             # 插件开关
             'enabled': False,
+            # 发送图片开关
+            'image_send': False,
             # 备用服务器开关
             'secondary': False,
             # 测试开关
@@ -643,133 +673,152 @@ class SmtpMsg(_PluginBase):
             logger.info(f"消息类型 {msg_type.value} 未开启消息发送")
             return
 
+        self.send_msg_build(test=False, title=title, text=text, image="" if image is None else image)
+
+    def send_msg_build(self, test, title, text="", image=""):
+        """
+        构建邮件正文
+        """
         try:
-            self.send_msg_to_main_smtp(title=title,
-                                       text=text,
-                                       image="" if image is None else image)
+            logger.debug("开始构建邮件内容")
+            # 设置邮件参数
+            message = MIMEMultipart()
+            # 邮件标题
+            message['Subject'] = Header(title, "utf-8")
+
+            message_alternative = MIMEMultipart('alternative')
+            message.attach(message_alternative)
+
+            """
+            文本模式 
+            """
+            if not self._image_send:
+                # text源码格式
+                mail_msg_text = f"""{self._sender_name}\n{title}\n{text}\n"""
+
+                # 添加文本格式正文
+                text_part = MIMEText(mail_msg_text, 'plain', 'utf-8')
+                message.attach(text_part)
+
+            """
+            图片模式 
+            """
+            if self._image_send:
+                # text源码格式
+                mail_msg_text = f"""{self._sender_name}\n{title}\n{text}\n"""
+
+                # 添加文本格式正文
+                text_part = MIMEText(mail_msg_text, 'plain', 'utf-8')
+                message.attach(text_part)
+
+                if image:
+                    # html源码格式
+                    mail_msg_html = f"""
+                                <div style="text-align:center;">
+                                <p style="background-color:#1864f5; padding:20px; color:white; ">{text}</p>
+                                </div>
+                                <div style="width:100%; background-color:#f6f6f6;">  
+                                <img src="cid:image1" width="256px" 
+                                style="padding:30px; display:block; margin-left:auto; margin-right:auto;" 
+                                alt="Image 1">
+                                </div>
+                    """
+
+                    # 配置图片
+                    try:
+                        with open(image, 'rb') as image_file:
+                            # 读取图片数据
+                            message_image = MIMEImage(image_file.read())
+
+                            # 定义图片ID与位置
+                            message_image.add_header('Content-ID', '<image1>')
+                            message.attach(message_image)
+
+                    except Exception as e:
+                        logger.warn("无法嵌入图片到邮件里")
+                        logger.debug(f"错误报告：{e}")
+
+                    # 添加html格式正文
+                    html_part = MIMEText(mail_msg_html, 'html', 'utf-8')
+                    message_alternative.attach(html_part)
+
+            # 普通模式
+            if not test:
+                logger.info("开始发送邮件")
+                self.send_msg_to_main_smtp(message=message, test=False)
+
+            # 测试模式
+            if test:
+                logger.info("开始发送测试邮件")
+                self.send_msg_to_main_smtp(message=message, test=True)
+
+                if self._secondary:
+                    self.send_msg_to_secondary_smtp(message=message, test=True)
 
         except Exception as msg_e:
             logger.error(f"Smtp消息发送失败，错误信息：{str(msg_e)}")
 
-    # 主服务器
-    def send_msg_to_main_smtp(self, title, text="", image=""):
-        # 设置邮件参数
-        message = MIMEMultipart()
-        # 邮件主题
-        message['Subject'] = Header(title, "utf-8")
-        # 发送人设置
-        message['From'] = f'{self._sender_name} <{self._main_sender_mail}>'
-        # 文本正文
-        text_part = MIMEText(text, 'plain', 'utf-8')
-        # 添加文本正文
-        message.attach(text_part)
-
-        # 如果有图片
-        if image is not None:
-            try:
-                with open(image, 'rb') as image_file:
-                    # 读取照片为二进制数据
-                    image_part = MIMEImage(image_file.read())
-                    # 设置图片在邮件中显示的位置
-                    image_part.add_header('Content-ID', '<image1>')
-                    # 添加图片
-                    message.attach(image_part)
-                    # html代码
-                    html_part = MIMEText(
-                        f'<html>\n'
-                        f'<body>\n'
-                        f'  <div style="text-align:center;">\n'
-                        f'  <p '
-                        f'style="'
-                        f'background-color:#1864f5; '
-                        f'padding:20px; '
-                        f'color:white; '
-                        f'"'
-                        f'>'
-                        f'{text}'
-                        f'</p>\n'
-                        f'  </div>\n'
-                        f'  <div style="width:100%; background-color:#f6f6f6;">'
-                        f'  <img '
-                        f'src="cid:image1" '
-                        f'width="256px" '
-                        f'style="'
-                        f'padding:30px; '
-                        f'display: block; '
-                        f'margin-left: auto; '
-                        f'margin-right: auto;" '
-                        f'alt="Image 1"'
-                        f'>\n'
-                        f'  </div>\n'
-                        f'</body>\n'
-                        f'</html>',
-                        'html', 'utf-8')
-
-                    # 添加html正文
-                    message.attach(html_part)
-
-            except Exception as e:
-                logger.info("无法使用html邮件格式，使用纯文本邮件格式发送")
-                logger.info(f"错误报告：{e}")
-
+    def send_msg_to_main_smtp(self, test, message):
+        """
+        发送邮件
+        """
         # 开始连接并发送
         if self._main_smtp_encryption == "SSL":
-            # 使用SSL加密，创建一个安全的SMTP连接
             main_server = smtplib.SMTP_SSL(self._main_smtp_host, self._main_smtp_port)
             logger.info("使用SSL连接")
         elif self._main_smtp_encryption == "TLS":
-            # 使用TLS加密，创建一个安全的SMTP连接
             main_server = smtplib.SMTP(self._main_smtp_host, self._main_smtp_port)
             logger.info("使用TLS连接")
         else:
             main_server = smtplib.SMTP(self._main_smtp_host, self._main_smtp_port)
             logger.info("不使用加密方式连接")
 
-        # 使用with语句自动管理SMTP连接
         with main_server:
             try:
-                # 验证服务器
                 main_server.ehlo(self._main_smtp_host)
 
-                # 如果使用TLS，需要再次验证并启动加密
                 if self._main_smtp_encryption == "TLS":
                     main_server.starttls()
                     main_server.ehlo(self._main_smtp_host)
                 logger.info("连接成功")
 
-                # 登录服务器
                 main_server.login(self._main_sender_mail, self._main_sender_password)
                 logger.info("登录成功")
 
             except Exception as e:
-                # 如果出现异常，打印错误信息
                 logger.error("无法与服务器建立连接")
                 logger.debug(f"错误报告：{e}")
 
                 if self._secondary is True and self._test is False:
                     logger.warn("尝试使用备用服务器进行发送")
-                    return self.send_msg_to_secondary_smtp(title=title, text=text, image=image)
+                    return self.send_msg_to_secondary_smtp(message=message, test=False)
                 else:
                     logger.error("未启动备用服务器，运行失败，请检查配置")
 
             else:
-                # 如果没有异常，发送邮件
                 try:
+                    # 重写发件人表头
+                    del message['From']
+                    message['From'] = f'{self._sender_name} <{self._main_sender_mail}>'
+
+                    # 测试模式
+                    if test:
+                        # 重写标题表头
+                        del message['Subject']
+                        message['Subject'] = Header("测试服务器配置", "utf-8")
+
                     # 拆分多个发件人
                     _receiver_list = self._receiver_mail.split(",")
                     # 发送邮件
                     main_server.sendmail(self._main_sender_mail, _receiver_list, message.as_string())
 
                 except Exception as e:
-                    # 如果出现异常，打印错误信息
                     logger.warn(f"发送失败")
                     logger.debug(f"错误报告：{e}")
 
                     if self._secondary is True and self._test is False:
                         logger.warn("尝试使用备用服务器进行发送")
-                        return self.send_msg_to_secondary_smtp(title=title,
-                                                               text=text,
-                                                               image=image)
+                        return self.send_msg_to_secondary_smtp(message=message, test=False)
                     else:
                         logger.error("未启动备用服务器，运行失败，请检查配置")
 
@@ -778,12 +827,13 @@ class SmtpMsg(_PluginBase):
                     logger.info("发送成功")
 
             finally:
-                if not self._secondary:
-                    # 无论是否有异常，都打印退出信息
+                if self._secondary is False:
                     logger.info("退出连接")
 
-    # 备用服务器
-    def send_msg_to_secondary_smtp(self, title, text="", image=""):
+    def send_msg_to_secondary_smtp(self, test, message):
+        """
+        发送邮件 - 备用服务器
+        """
         # 检查配置完整性
         if (not self._secondary_smtp_host or
                 not self._secondary_smtp_port or
@@ -791,118 +841,58 @@ class SmtpMsg(_PluginBase):
                 not self._secondary_sender_mail or
                 not self._secondary_sender_password):
             logger.error("备用服务器参数配置不完整，终止运行")
-            return False, "参数未配置"
-
-        # 设置邮件参数
-        message = MIMEMultipart()
-        # 邮件主题
-        message['Subject'] = Header(title, "utf-8")
-        # 发送人设置
-        message['From'] = f'{self._sender_name} <{self._secondary_sender_mail}>'
-        # 文本正文
-        text_part = MIMEText(text, 'plain', 'utf-8')
-        # 添加文本正文
-        message.attach(text_part)
-
-        # 如果有图片
-        if image is not None:
-            try:
-                with open(image, 'rb') as image_file:
-                    # 读取照片为二进制数据
-                    image_part = MIMEImage(image_file.read())
-                    # 设置图片在邮件中显示的位置
-                    image_part.add_header('Content-ID', '<image1>')
-                    # 添加图片
-                    message.attach(image_part)
-                    # html代码
-                    html_part = MIMEText(
-                        f'<html>\n'
-                        f'<body>\n'
-                        f'  <div style="text-align:center;">\n'
-                        f'  <p '
-                        f'style="'
-                        f'background-color:#1864f5; '
-                        f'padding:20px; '
-                        f'color:white; '
-                        f'"'
-                        f'>'
-                        f'{text}'
-                        f'</p>\n'
-                        f'  </div>\n'
-                        f'  <div style="width:100%; background-color:#f6f6f6;">'
-                        f'  <img '
-                        f'src="cid:image1" '
-                        f'width="256px" '
-                        f'style="'
-                        f'padding:30px; '
-                        f'display: block; '
-                        f'margin-left: auto; '
-                        f'margin-right: auto;" '
-                        f'alt="Image 1"'
-                        f'>\n'
-                        f'  </div>\n'
-                        f'</body>\n'
-                        f'</html>',
-                        'html', 'utf-8')
-
-                    # 添加html正文
-                    message.attach(html_part)
-
-            except Exception as e:
-                logger.info("无法使用html邮件格式，使用纯文本邮件格式发送")
-                logger.info(f"错误报告：{e}")
+            return
 
         # 开始连接并发送
         if self._secondary_smtp_encryption == "SSL":
             secondary_server = smtplib.SMTP_SSL(self._secondary_smtp_host, self._secondary_smtp_port)
             logger.info("使用SSL连接备用服务器")
         elif self._secondary_smtp_encryption == "TLS":
-            # 使用TLS加密，创建一个安全的SMTP连接
             secondary_server = smtplib.SMTP(self._secondary_smtp_host, self._secondary_smtp_port)
             logger.info("使用TLS连接备用服务器")
         else:
             secondary_server = smtplib.SMTP(self._secondary_smtp_host, self._secondary_smtp_port)
             logger.info("不使用加密方式连接备用服务器")
 
-        # 使用with语句自动管理SMTP连接
         with secondary_server:
             try:
-                # 验证服务器
                 secondary_server.ehlo(self._secondary_smtp_host)
 
-                # 如果使用TLS，需要再次验证并启动加密
                 if self._secondary_smtp_encryption == "TLS":
                     secondary_server.starttls()
                     secondary_server.ehlo(self._secondary_smtp_host)
                 logger.info("备用服务器连接成功")
 
-                # 登录服务器
                 secondary_server.login(self._secondary_sender_mail, self._secondary_sender_password)
                 logger.info("备用服务器登录成功")
 
             except Exception as e:
-                # 如果出现异常，打印错误信息
                 logger.warn("无法与备用服务器建立连接")
                 logger.debug(f"错误报告:{e}")
 
             else:
-                # 如果没有异常，发送邮件
                 try:
+                    # 重写发件人表头
+                    del message['From']
+                    message['From'] = f'{self._sender_name} <{self._secondary_sender_mail}>'
+
+                    if test:
+                        # 重写标题表头
+                        del message['Subject']
+                        message['Subject'] = Header("测试备用服务器配置", "utf-8")
+
                     # 拆分多个收件人
                     _receiver_list = self._receiver_mail.split(",")
                     # 发送邮件
                     secondary_server.sendmail(self._secondary_sender_mail, _receiver_list, message.as_string())
 
                 except Exception as e:
-                    # 如果出现异常，打印错误信息
                     logger.warn("备用服务器发送失败")
                     logger.debug(f"错误报告：{e}")
                 else:
-                    # 如果没有异常，打印成功信息
                     logger.info("备用服务器发送成功")
 
             finally:
-                # 无论是否有异常，都打印退出信息
                 logger.info("退出连接")
 
     # 退出插件
