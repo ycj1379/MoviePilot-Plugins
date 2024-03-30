@@ -22,7 +22,7 @@ class SmtpMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "1.5"
+    plugin_version = "1.6"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -80,7 +80,6 @@ class SmtpMsg(_PluginBase):
     _msgtypes = []
     _content = ""
 
-    @eventmanager.register(EventType.PluginReload)
     def init_plugin(self, config: dict = None):
         logger.info(f"初始化插件 {self.plugin_name}")
         if config:
@@ -123,7 +122,6 @@ class SmtpMsg(_PluginBase):
             self._msgtypes = config.get("msgtypes") or []
             # 自定义模板内容
             self._content = config.get("content") or ""
-
             # 判断状态
             self.__on_config_change()
 
@@ -175,7 +173,7 @@ class SmtpMsg(_PluginBase):
 
             # 测试邮件
             elif self._test:
-                m_success, s_success = self.send_to_smtp(test=self._test,
+                m_success, s_success = self.send_to_smtp(test=True,
                                                          secondary=self._secondary,
                                                          title="",
                                                          text="这是一封测试邮件~~~",
@@ -188,14 +186,14 @@ class SmtpMsg(_PluginBase):
                         logger.info(f"{message}")
                     else:
                         message = "主服务器测试邮件发送成功！备用服务器测试邮件发送失败！"
-                        logger.info(f"{message}")
+                        logger.warning(f"{message}")
                 else:
                     if s_success:
                         message = "备用服务器测试邮件发送成功！主服务器测试邮件发送失败！"
-                        logger.info(f"{message}")
+                        logger.warning(f"{message}")
                     else:
                         message = "所有服务器测试邮件发送失败！"
-                        logger.warning(f"{message}")
+                        logger.error(f"{message}")
 
                 self.systemmessage.put(message)
 
@@ -890,8 +888,11 @@ class SmtpMsg(_PluginBase):
             self._login_to_smtp_server(server=server, sender_mail=sender_mail, password=password, log_type=log_type)
             # 构建邮件正文
             if not message:
-                message = self._msg_build(test=test, title=title, text=text, image=image, log_type=log_type,
-                                          userid=userid, msg_type=msg_type)
+                message = self._msg_build(title=title, text=text, image=image, userid=userid, msg_type=msg_type)
+            # 测试模式，修改邮件主题
+            if test:
+                del message['Subject']
+                message['Subject'] = Header(f"测试{log_type}服务器配置", "utf-8")
             # 发件人与收件人
             del message['From']
             message['From'] = f'{sender_name} <{sender_mail}>'
@@ -997,23 +998,16 @@ class SmtpMsg(_PluginBase):
             logger.error(f"{log_type}SMTP服务器登录失败")
             raise
 
-    def _msg_build(self, test, title, text, image, log_type, userid, msg_type):
+    def _msg_build(self, title, text, image, userid, msg_type):
         """
         构建邮件正文
         """
         logger.debug("开始构建邮件")
         try:
             message = MIMEMultipart()
-
-            if test:
-                del message['Subject']
-                message['Subject'] = Header(f"测试{log_type}服务器配置", "utf-8")
-            else:
-                message['Subject'] = Header(title, "utf-8")
-
+            message['Subject'] = Header(title, "utf-8")
             message_alternative = MIMEMultipart('alternative')
             message.attach(message_alternative)
-
             logger.debug("邮件标题构建成功")
 
             # 读取模板文件
