@@ -22,7 +22,7 @@ class SmtpMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "1.4"
+    plugin_version = "1.5"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -35,7 +35,7 @@ class SmtpMsg(_PluginBase):
     auth_level = 1
 
     # 私有属性
-    _test_image = settings.ROOT_PATH / "public" / "plugin_icon" / "Synomail_A.png"
+    _test_image = "/public/plugin_icon/Synomail_A.png"
     # 插件开关
     _enabled = False
     # 发送图片开关
