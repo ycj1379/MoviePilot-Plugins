@@ -1,5 +1,4 @@
 import shutil
-from datetime import timedelta, datetime
 from typing import Any, List, Dict, Tuple
 
 import smtplib
@@ -23,7 +22,7 @@ class SmtpMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "1.3"
+    plugin_version = "1.4"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -36,6 +35,7 @@ class SmtpMsg(_PluginBase):
     auth_level = 1
 
     # 私有属性
+    _test_image = settings.ROOT_PATH / "public" / "plugin_icon" / "Synomail_A.png"
     # 插件开关
     _enabled = False
     # 发送图片开关
@@ -173,14 +173,32 @@ class SmtpMsg(_PluginBase):
                 self.systemmessage.put(f"{self.plugin_name}参数配置不完整，关闭插件！")
                 logger.warning(f"参数配置不完整，关闭插件")
 
-                # 测试邮件
+            # 测试邮件
             elif self._test:
-                self.send_to_smtp(test=self._test,
-                                  secondary=False,
-                                  title="",
-                                  text="这是一封测试邮件~~~",
-                                  image="/public/plugin_icon/Synomail_A.png",
-                                  _smtp_settings=self._merge_config())
+                m_success, s_success = self.send_to_smtp(test=self._test,
+                                                         secondary=self._secondary,
+                                                         title="",
+                                                         text="这是一封测试邮件~~~",
+                                                         image=self._test_image,
+                                                         _smtp_settings=self._merge_config())
+
+                if m_success:
+                    if s_success:
+                        message = "所有服务器测试邮件发送成功！" if s_success is not None else "主服务器测试邮件发送成功！未启动备用服务器！"
+                        logger.info(f"{message}")
+                    else:
+                        message = "主服务器测试邮件发送成功！备用服务器测试邮件发送失败！"
+                        logger.info(f"{message}")
+                else:
+                    if s_success:
+                        message = "备用服务器测试邮件发送成功！主服务器测试邮件发送失败！"
+                        logger.info(f"{message}")
+                    else:
+                        message = "所有服务器测试邮件发送失败！"
+                        logger.warning(f"{message}")
+
+                self.systemmessage.put(message)
+
                 # 关闭测试开关
                 self._test = False
                 # 更新配置
@@ -1051,11 +1069,11 @@ class SmtpMsg(_PluginBase):
         logger.debug("开始发送邮件")
         try:
             server.sendmail(sender_mail, receiver_list, message.as_string())
-            logger.info(f"使用{log_type}SMTP服务器，发送{test_type}邮件成功")
+            logger.debug(f"使用{log_type}SMTP服务器，发送{test_type}邮件成功")
             server.quit()
             return True
         except ImportError:
-            logger.warning(f"使用{log_type}SMTP服务器发送{test_type}邮件失败")
+            logger.debug(f"使用{log_type}SMTP服务器发送{test_type}邮件失败")
             server.quit()
             return False
 
