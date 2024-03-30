@@ -9,7 +9,7 @@ MoviePilot三方插件市场：https://github.com/Aqr-k/MoviePilot-Plugins/
 
 ### 插件新增
 
-- [SMTP邮件消息通知](plugins_record/Smtpmsg.md)
+- [SMTP邮件消息通知](docs/Smtpmsg.md)
 
 ### 特别鸣谢
 - [thsrite](https://github.com/thsrite)
