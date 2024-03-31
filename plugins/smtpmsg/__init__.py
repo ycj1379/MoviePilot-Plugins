@@ -22,7 +22,7 @@ class SmtpMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "1.7"
+    plugin_version = "1.8"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -188,10 +188,10 @@ class SmtpMsg(_PluginBase):
 
                 if m_success:
                     if s_success:
-                        message = "所有服务器测试邮件发送成功！" if s_success is not None else "主服务器测试邮件发送成功！未启动备用服务器！"
+                        message = "所有服务器测试邮件发送成功！"
                         logger.info(f"{message}")
                     else:
-                        message = "主服务器测试邮件发送成功！备用服务器测试邮件发送失败！"
+                        message = "主服务器测试邮件发送成功！备用服务器测试邮件发送失败！" if s_success is not None else "主服务器测试邮件发送成功！未启动备用服务器！"
                         logger.warning(f"{message}")
                 else:
                     if s_success:
