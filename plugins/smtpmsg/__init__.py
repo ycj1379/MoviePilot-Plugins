@@ -22,7 +22,7 @@ class SmtpMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "1.6"
+    plugin_version = "1.7"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -81,6 +81,9 @@ class SmtpMsg(_PluginBase):
     _content = ""
 
     def init_plugin(self, config: dict = None):
+        """
+        初始化插件
+        """
         logger.info(f"初始化插件 {self.plugin_name}")
         if config:
             # 插件开关
@@ -122,10 +125,13 @@ class SmtpMsg(_PluginBase):
             self._msgtypes = config.get("msgtypes") or []
             # 自定义模板内容
             self._content = config.get("content") or ""
-            # 判断状态
+
             self.__on_config_change()
 
     def __on_config_change(self):
+        """
+        状态判断
+        """
         tag = "" if self._enabled else "未开启，"
         # 保存自定义模板
         if self._save:
@@ -203,12 +209,18 @@ class SmtpMsg(_PluginBase):
                 self.__update_config()
 
     def __reset_custom_template(self):
+        """
+        恢复默认模板
+        """
         if self._reset:
             shutil.copy(self.default_template, self.custom_template)
         self._content = self.custom_template.read_text(encoding="utf-8")
         return self._content
 
     def __update_config(self):
+        """
+        更新配置
+        """
         self.update_config({
             # 测试开关
             "test": self._test,
@@ -262,9 +274,6 @@ class SmtpMsg(_PluginBase):
         pass
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
-        """
-        拼装插件配置页面，需要返回两块数据：1、页面配置；2、数据结构
-        """
         # 编历 NotificationType 枚举，生成消息类型选项
         MsgTypeOptions = []
         for item in NotificationType:
@@ -803,9 +812,6 @@ class SmtpMsg(_PluginBase):
         }
 
     def get_page(self) -> List[dict]:
-        """
-        拼装插件详情页面，需要返回页面配置，同时附带数据
-        """
         pass
 
     @eventmanager.register(EventType.NoticeMessage)
