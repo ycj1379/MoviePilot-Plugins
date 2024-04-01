@@ -22,7 +22,7 @@ class SmtpMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "1.9"
+    plugin_version = "1.9.1"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -840,7 +840,7 @@ class SmtpMsg(_PluginBase):
                                             'variant': 'tonal',
                                             'text': "自定义配置支持的变量："
                                                     "类型：{msg_type}、用户ID：{userid}、"
-                                                    "标题：{title}、内容：'{text}'、图片：cid:image。"
+                                                    "标题：{title}、内容：{text}、图片：cid:image。"
                                         }
                                     }
                                 ]
