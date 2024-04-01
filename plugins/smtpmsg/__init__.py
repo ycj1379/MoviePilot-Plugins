@@ -22,7 +22,7 @@ class SmtpMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "1.8"
+    plugin_version = "1.9"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -364,101 +364,6 @@ class SmtpMsg(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 6
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'main_smtp_host',
-                                            'label': 'SMTP服务器地址',
-                                            'placeholder': 'smtp.example.com',
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 4
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'main_smtp_port',
-                                            'label': 'SMTP服务器端口',
-                                            'placeholder': '常见：25、465、587、995……',
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 2
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VSelect',
-                                        'props': {
-                                            'model': 'main_smtp_encryption',
-                                            'label': '加密方式',
-                                            'items': encryption_options
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 6
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'main_sender_mail',
-                                            'label': 'SMTP邮箱',
-                                            'placeholder': 'example@example.com',
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 6
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'main_sender_password',
-                                            'label': 'SMTP邮箱密码/Token',
-                                            'placeholder': 'Passwd or Token'
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
                                 },
                                 'content': [
                                     {
@@ -474,96 +379,265 @@ class SmtpMsg(_PluginBase):
                         ]
                     },
                     {
-                        'component': 'VRow',
+                        'component': 'VTabs',
+                        'props': {
+                            'model': '_tabs',
+                            'height': 72,
+                            'style': {
+                                'margin-top': '10px',
+                                'margin-bottom': '10px',
+                            }
+                        },
                         'content': [
                             {
-                                'component': 'VCol',
+                                'component': 'VTab',
                                 'props': {
-                                    'cols': 12,
-                                    'md': 6
+                                    'value': 'main_smtp',
+                                    'style': {
+                                        'padding-top': '10px',
+                                        'padding-bottom': '10px',
+                                        'font-size': '16px'
+                                    },
                                 },
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'secondary_smtp_host',
-                                            'label': '备用SMTP服务器地址',
-                                            'placeholder': 'smtp.example.com',
-                                        }
-                                    }
-                                ]
+                                'text': '主SMTP服务器'
                             },
                             {
-                                'component': 'VCol',
+                                'component': 'VTab',
                                 'props': {
-                                    'cols': 12,
-                                    'md': 4
+                                    'value': 'secondary_smtp',
+                                    'style': {
+                                        'padding-top': '10px',
+                                        'padding-bottom': '10px',
+                                        'font-size': '16px'
+                                    },
                                 },
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'secondary_smtp_port',
-                                            'label': '备用SMTP服务器端口',
-                                            'placeholder': '常见：25、465、587、995……',
-                                        }
-                                    }
-                                ]
+                                'text': '备用SMTP服务器'
                             },
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 2
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VSelect',
-                                        'props': {
-                                            'model': 'secondary_smtp_encryption',
-                                            'label': '加密方式',
-                                            'items': encryption_options
-                                        }
-                                    }
-                                ]
-                            }
                         ]
                     },
                     {
-                        'component': 'VRow',
+                        'component': 'VWindow',
+                        'props': {
+                            'model': '_tabs',
+                        },
                         'content': [
                             {
-                                'component': 'VCol',
+                                'component': 'VWindowItem',
                                 'props': {
-                                    'cols': 12,
-                                    'md': 6
+                                    'value': 'main_smtp',
+                                    'style': {
+                                        'padding-top': '20px',
+                                        'padding-bottom': '20px'
+                                    },
                                 },
                                 'content': [
                                     {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'secondary_sender_mail',
-                                            'label': '备用SMTP邮箱',
-                                            'placeholder': 'example@example.com',
-                                        }
+                                        'component': 'VForm',
+                                        'content': [
+                                            {
+                                                'component': 'VRow',
+                                                'content': [
+                                                    {
+                                                        'component': 'VCol',
+                                                        'props': {
+                                                            'cols': '12',
+                                                            'md': 6
+                                                        },
+                                                        'content': [
+                                                            {
+                                                                'component': 'VTextField',
+                                                                'props': {
+                                                                    'model': 'main_smtp_host',
+                                                                    'label': 'SMTP服务器地址',
+                                                                    'placeholder': 'smtp.example.com',
+                                                                }
+                                                            }
+                                                        ]
+                                                    },
+                                                    {
+                                                        'component': 'VCol',
+                                                        'props': {
+                                                            'cols': '12',
+                                                            'md': 4
+                                                        },
+                                                        'content': [
+                                                            {
+                                                                'component': 'VTextField',
+                                                                'props': {
+                                                                    'model': 'main_smtp_port',
+                                                                    'label': 'SMTP服务器端口',
+                                                                    'placeholder': '常见：25、465、587、995……',
+                                                                }
+                                                            }
+                                                        ]
+                                                    },
+                                                    {
+                                                        'component': 'VCol',
+                                                        'props': {
+                                                            'cols': '12',
+                                                            'md': 2
+                                                        },
+                                                        'content': [
+                                                            {
+                                                                'component': 'VSelect',
+                                                                'props': {
+                                                                    'model': 'main_smtp_encryption',
+                                                                    'label': '加密方式',
+                                                                    'items': encryption_options
+                                                                }
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VRow',
+                                                'content': [
+                                                    {
+                                                        'component': 'VCol',
+                                                        'props': {
+                                                            'cols': 'auto',
+                                                            'md': 6
+                                                        },
+                                                        'content': [
+                                                            {
+                                                                'component': 'VTextField',
+                                                                'props': {
+                                                                    'model': 'main_sender_mail',
+                                                                    'label': 'SMTP邮箱',
+                                                                    'placeholder': 'example@example.com',
+                                                                }
+                                                            }
+                                                        ]
+                                                    },
+                                                    {
+                                                        'component': 'VCol',
+                                                        'props': {
+                                                            'cols': 'auto',
+                                                            'md': 6
+                                                        },
+                                                        'content': [
+                                                            {
+                                                                'component': 'VTextField',
+                                                                'props': {
+                                                                    'model': 'main_sender_password',
+                                                                    'label': 'SMTP邮箱密码/Token',
+                                                                    'placeholder': 'Passwd or Token'
+                                                                }
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                        ]
                                     }
                                 ]
                             },
                             {
-                                'component': 'VCol',
+                                'component': 'VWindowItem',
                                 'props': {
-                                    'cols': 12,
-                                    'md': 6
+                                    'value': 'secondary_smtp',
+                                    'style': {
+                                        'padding-top': '20px',
+                                        'padding-bottom': '20px'
+                                    },
                                 },
                                 'content': [
                                     {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'secondary_sender_password',
-                                            'label': '备用SMTP邮箱密码/Token',
-                                            'placeholder': 'Passwd or Token'
-                                        }
-                                    }
+                                        'component': 'VRow',
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 6
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VTextField',
+                                                        'props': {
+                                                            'model': 'secondary_smtp_host',
+                                                            'label': '备用SMTP服务器地址',
+                                                            'placeholder': 'smtp.example.com',
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 4
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VTextField',
+                                                        'props': {
+                                                            'model': 'secondary_smtp_port',
+                                                            'label': '备用SMTP服务器端口',
+                                                            'placeholder': '常见：25、465、587、995……',
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 2
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VSelect',
+                                                        'props': {
+                                                            'model': 'secondary_smtp_encryption',
+                                                            'label': '加密方式',
+                                                            'items': encryption_options
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        'component': 'VRow',
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 6
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VTextField',
+                                                        'props': {
+                                                            'model': 'secondary_sender_mail',
+                                                            'label': '备用SMTP邮箱',
+                                                            'placeholder': 'example@example.com',
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 6
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VTextField',
+                                                        'props': {
+                                                            'model': 'secondary_sender_password',
+                                                            'label': '备用SMTP邮箱密码/Token',
+                                                            'placeholder': 'Passwd or Token'
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
                                 ]
                             }
                         ]
@@ -632,6 +706,9 @@ class SmtpMsg(_PluginBase):
                     },
                     {
                         'component': 'VRow',
+                        'props': {
+                            'align': 'center'
+                        },
                         'content': [
                             {
                                 'component': 'VCol',
@@ -670,12 +747,15 @@ class SmtpMsg(_PluginBase):
                     },
                     {
                         'component': 'VRow',
+                        'props': {
+                            'align': 'center'
+                        },
                         'content': [
                             {
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 3
+                                    'md': 3,
                                 },
                                 'content': [
                                     {
@@ -691,7 +771,7 @@ class SmtpMsg(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 3
+                                    'md': 3,
                                 },
                                 'content': [
                                     {
@@ -707,7 +787,7 @@ class SmtpMsg(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 6
+                                    'md': 6,
                                 },
                                 'content': [
                                     {

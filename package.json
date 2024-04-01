@@ -2,7 +2,7 @@
     "SmtpMsg": {
         "name": "SMTP邮件消息通知",
         "description": "支持使用邮件服务器发送消息通知。",
-        "version": "1.8",
+        "version": "1.9",
         "icon": "Synomail_A.png",
         "author": "Aqr-K",
         "level": 1
