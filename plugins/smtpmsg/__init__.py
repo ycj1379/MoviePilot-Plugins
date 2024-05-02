@@ -22,7 +22,7 @@ class SmtpMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "1.9.1"
+    plugin_version = "2.0"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -53,8 +53,10 @@ class SmtpMsg(_PluginBase):
 
     # 默认模板路径
     default_template = settings.ROOT_PATH / "app" / "plugins" / "smtpmsg" / "template" / "default.html"
+    # 自定义模板目录
+    custom_template_dir = settings.PLUGIN_DATA_PATH / "smtpmsg" / "template"
     # 自定义模板路径
-    custom_template = settings.ROOT_PATH / "app" / "plugins" / "smtpmsg" / "template" / "custom.html"
+    custom_template = custom_template_dir / "custom.html"
 
     # 主服务器-地址/端口/加密方式
     _main_smtp_host = None
@@ -85,6 +87,7 @@ class SmtpMsg(_PluginBase):
         初始化插件
         """
         logger.info(f"初始化插件 {self.plugin_name}")
+
         if config:
             # 插件开关
             self._enabled = config.get("enabled")
@@ -101,19 +104,17 @@ class SmtpMsg(_PluginBase):
             # 恢复默认模板
             self._reset = config.get("reset")
 
-            # 主服务器-地址/端口/加密方式
+            # 主服务器
             self._main_smtp_host = config.get("main_smtp_host")
             self._main_smtp_port = config.get("main_smtp_port")
             self._main_smtp_encryption = config.get("main_smtp_encryption")
-            # 主服务器-账号/密码
             self._main_sender_mail = config.get("main_sender_mail")
             self._main_sender_password = config.get("main_sender_password")
 
-            # 备用服务器-地址/端口/加密方式
+            # 备用服务器
             self._secondary_smtp_host = config.get("secondary_smtp_host")
             self._secondary_smtp_port = config.get("secondary_smtp_port")
             self._secondary_smtp_encryption = config.get("secondary_smtp_encryption")
-            # 备用服务器-账号/密码
             self._secondary_sender_mail = config.get("secondary_sender_mail")
             self._secondary_sender_password = config.get("secondary_sender_password")
 
@@ -126,41 +127,74 @@ class SmtpMsg(_PluginBase):
             # 自定义模板内容
             self._content = config.get("content") or ""
 
-            self.__on_config_change()
+            # 检查自定义模板是否存在
+            self.check_custom_template()
 
-    def __on_config_change(self):
+            # 状态判断
+            self.__on_config_change(config=config)
+
+    def check_custom_template(self):
+        """
+        检查自定义模板
+        """
+        # 自定义模板不存在，创建模板文件
+        if not self.custom_template.exists():
+            self.custom_template_dir.mkdir(parents=True, exist_ok=True)
+            self.custom_template.touch()
+            # 如果_content不为空，写入自定义模板
+            if self._content:
+                self.custom_template.write_text(self._content, encoding="utf-8")
+            # 否则，复制默认模板到自定义模板
+            else:
+                self.default_template.replace(self.custom_template)
+            logger.warning(f"自定义邮件模板文件不存在，已创建模板文件！")
+
+        # 自定义模板存在
+        elif self.custom_template.exists():
+            # 读取自定义模板内容
+            # 判断self._content与自定义模板内容是否一致
+            if (self._save is not True
+                    and self._reset is not True
+                    and self._content != self.custom_template.read_text(encoding="utf-8")):
+                # 更新配置与显示
+                self._content = self.custom_template.read_text(encoding="utf-8")
+                self.update_config({"content": self._content})
+            else:
+                logger.debug(f"自定义邮件模板文件已存在！")
+
+    def __on_config_change(self, config: dict):
         """
         状态判断
         """
         tag = "" if self._enabled else "未开启，"
         # 保存自定义模板
-        if self._save:
-            if self._reset:
-                self._reset = False
+        if self._save is True:
+            if self._reset is True:
+                config.update({"reset": False})
                 # 更新配置
-                self.__update_config()
-                self.systemmessage.put(f"{self.plugin_name}自定义模板与恢复默认模板不可同时启动，关闭恢复默认模板按钮！")
+                self.update_config(config)
                 logger.warning(f"自定义模板与恢复默认模板不可同时启动，关闭恢复默认模板按钮！")
-            # 写入文件
+                self.systemmessage.put(f"{self.plugin_name}自定义模板与恢复默认模板不可同时启动，关闭恢复默认模板按钮！")
+            # 写入自定义模板文件
             self.custom_template.write_text(self._content, encoding="utf-8")
-            self.systemmessage.put(f"{self.plugin_name}{tag}自定义邮件模板保存成功！")
-            logger.info(f"{self.plugin_name}{tag}自定义邮件模板保存成功！")
-            # 关闭保存自定义模板开关
-            self._save = False
-            # 更新显示
-            self._content = self.custom_template.read_text(encoding="utf-8")
+            # 保存存自定义模板，更新显示，并关闭开关
+            config.update({"save": False, "content": self._content})
             # 更新配置
-            self.__update_config()
+            self.update_config(config)
+            logger.info(f"{self.plugin_name}{tag}自定义邮件模板保存成功！")
+            self.systemmessage.put(f"{self.plugin_name}{tag}自定义邮件模板保存成功！")
 
         # 恢复默认模板
-        elif not self._save and self._reset:
-            self._content = self.__reset_custom_template()
-            self.systemmessage.put(f"{self.plugin_name}{tag}默认邮件模板恢复成功！")
-            logger.info(f"{self.plugin_name}{tag}默认邮件模板恢复成功！")
-            # 关闭恢复默认模板开关
-            self._reset = False
+        elif self._save is not True and self._reset is True:
+            # 恢复默认模板
+            shutil.copy(self.default_template, self.custom_template)
+            # 更新显示，关闭恢复默认模板开关
+            self._content = self.custom_template.read_text(encoding="utf-8")
+            config.update({"reset": False, "content": self._content})
             # 更新配置
-            self.__update_config()
+            self.update_config(config)
+            logger.info(f"{self.plugin_name}{tag}默认邮件模板恢复成功！")
+            self.systemmessage.put(f"{self.plugin_name}{tag}默认邮件模板恢复成功！")
 
         # 启用插件
         if self._enabled:
@@ -171,11 +205,10 @@ class SmtpMsg(_PluginBase):
                     not self._main_sender_mail or
                     not self._main_sender_password):
                 # 关闭插件
-                self._enabled = False
-                self._test = False
-                self.__update_config()
-                self.systemmessage.put(f"{self.plugin_name}参数配置不完整，关闭插件！")
+                config.update({"enabled": False, "test": False})
+                self.update_config(config)
                 logger.warning(f"参数配置不完整，关闭插件")
+                self.systemmessage.put(f"{self.plugin_name}参数配置不完整，关闭插件！")
 
             # 测试邮件
             elif self._test:
@@ -198,70 +231,14 @@ class SmtpMsg(_PluginBase):
                         message = "备用服务器测试邮件发送成功！主服务器测试邮件发送失败！"
                         logger.warning(f"{message}")
                     else:
-                        message = "所有服务器测试邮件发送失败！"
+                        message = "所有服务器测试邮件发送失败！" if s_success is not None else "服务器未启动！无法测试！"
                         logger.error(f"{message}")
-
-                self.systemmessage.put(message)
-
                 # 关闭测试开关
-                self._test = False
+                config.update({"test": False})
                 # 更新配置
-                self.__update_config()
-
-    def __reset_custom_template(self):
-        """
-        恢复默认模板
-        """
-        if self._reset:
-            shutil.copy(self.default_template, self.custom_template)
-        self._content = self.custom_template.read_text(encoding="utf-8")
-        return self._content
-
-    def __update_config(self):
-        """
-        更新配置
-        """
-        self.update_config({
-            # 测试开关
-            "test": self._test,
-            # 插件开关
-            "enabled": self._enabled,
-            # 备用服务器开关
-            "secondary": self._secondary,
-            # 发送图片开关
-            "image_send": self._image_send,
-            # 自定义模板
-            "custom": self._custom,
-            # 保存自定义模板
-            "save": self._save,
-            # 恢复默认模板
-            "reset": self._reset,
-            # 自定义模板内容
-            "content": self._content or "",
-
-            # 消息类型
-            "msgtypes": self._msgtypes or [],
-
-            # 主服务器-地址/端口/加密方式
-            "main_smtp_host": self._main_smtp_host,
-            "main_smtp_port": self._main_smtp_port,
-            "main_smtp_encryption": self._main_smtp_encryption,
-            # 主服务器-账号/密码
-            "main_sender_mail": self._main_sender_mail,
-            "main_sender_password": self._main_sender_password,
-
-            # 备用服务器-地址/端口/加密方式
-            "secondary_smtp_host": self._secondary_smtp_host,
-            "secondary_smtp_port": self._secondary_smtp_port,
-            "secondary_smtp_encryption": self._secondary_smtp_encryption,
-            # 备用服务器-账号/密码
-            "secondary_sender_mail": self._secondary_sender_mail,
-            "secondary_sender_password": self._secondary_sender_password,
-
-            # 发件人用户名/收件人地址
-            "sender_name": self._sender_name,
-            "receiver_mail": self._receiver_mail,
-        })
+                self.update_config(config)
+                logger.info(f"{message}")
+                self.systemmessage.put(message)
 
     def get_state(self) -> bool:
         return self._enabled
@@ -302,7 +279,7 @@ class SmtpMsg(_PluginBase):
                                         'component': 'VSwitch',
                                         'props': {
                                             'model': 'enabled',
-                                            'label': '启用插件',
+                                            'label': '启用插件v2.0',
                                         }
                                     }
                                 ]
@@ -384,7 +361,7 @@ class SmtpMsg(_PluginBase):
                             'model': '_tabs',
                             'height': 72,
                             'style': {
-                                'margin-top': '10px',
+                                'margin-top': '8px',
                                 'margin-bottom': '10px',
                             }
                         },
@@ -412,6 +389,30 @@ class SmtpMsg(_PluginBase):
                                     },
                                 },
                                 'text': '备用SMTP服务器'
+                            },
+                            {
+                                'component': 'VTab',
+                                'props': {
+                                    'value': 'email_setting',
+                                    'style': {
+                                        'padding-top': '10px',
+                                        'padding-bottom': '10px',
+                                        'font-size': '16px'
+                                    },
+                                },
+                                'text': '邮件设置'
+                            },
+                            {
+                                'component': 'VTab',
+                                'props': {
+                                    'value': 'custom_template',
+                                    'style': {
+                                        'padding-top': '10px',
+                                        'padding-bottom': '10px',
+                                        'font-size': '16px'
+                                    },
+                                },
+                                'text': '自定义邮件模板'
                             },
                         ]
                     },
@@ -496,7 +497,7 @@ class SmtpMsg(_PluginBase):
                                                     {
                                                         'component': 'VCol',
                                                         'props': {
-                                                            'cols': 'auto',
+                                                            'cols': '12',
                                                             'md': 6
                                                         },
                                                         'content': [
@@ -513,7 +514,7 @@ class SmtpMsg(_PluginBase):
                                                     {
                                                         'component': 'VCol',
                                                         'props': {
-                                                            'cols': 'auto',
+                                                            'cols': '12',
                                                             'md': 6
                                                         },
                                                         'content': [
@@ -639,210 +640,234 @@ class SmtpMsg(_PluginBase):
                                         ]
                                     },
                                 ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
+                            },
                             {
-                                'component': 'VCol',
+                                'component': 'VWindowItem',
                                 'props': {
-                                    'cols': 12,
-                                    'md': 6
+                                    'value': 'email_setting',
+                                    'style': {
+                                        'padding-top': '20px',
+                                        'padding-bottom': '20px'
+                                    },
                                 },
                                 'content': [
                                     {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'sender_name',
-                                            'label': '发件人用户名',
-                                            'placeholder': '不输入时，默认使用发件人邮箱作为发件人用户名',
-                                        }
-                                    }
+                                        'component': 'VRow',
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 6
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VTextField',
+                                                        'props': {
+                                                            'model': 'sender_name',
+                                                            'label': '发件人用户名',
+                                                            'placeholder': '不输入时，默认使用发件人邮箱作为发件人用户名',
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 6
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VTextField',
+                                                        'props': {
+                                                            'model': 'receiver_mail',
+                                                            'label': '收件人邮箱',
+                                                            'placeholder': '默认发送至发件人地址，多个邮箱用英文","分割'
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        'component': 'VRow',
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VSelect',
+                                                        'props': {
+                                                            'multiple': True,
+                                                            'chips': True,
+                                                            'model': 'msgtypes',
+                                                            'label': '消息类型',
+                                                            'items': MsgTypeOptions
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
                                 ]
                             },
                             {
-                                'component': 'VCol',
+                                'component': 'VWindowItem',
                                 'props': {
-                                    'cols': 12,
-                                    'md': 6
+                                    'value': 'custom_template',
+                                    'style': {
+                                        'padding-top': '20px',
+                                        'padding-bottom': '20px'
+                                    },
                                 },
                                 'content': [
                                     {
-                                        'component': 'VTextField',
+                                        'component': 'VRow',
                                         'props': {
-                                            'model': 'receiver_mail',
-                                            'label': '收件人邮箱',
-                                            'placeholder': '默认发送至发件人地址，多个邮箱用英文","分割'
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12
-                                },
-                                'content': [
+                                            'align': 'center'
+                                        },
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 3
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VSwitch',
+                                                        'props': {
+                                                            'model': 'custom',
+                                                            'label': '启用自定义模板',
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 9
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VAlert',
+                                                        'props': {
+                                                            'type': 'warning',
+                                                            'variant': 'tonal',
+                                                            'text': '开启"写入自定义模板"后，"恢复默认模板"不会生效！配置在写入后才会生效！'
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
                                     {
-                                        'component': 'VSelect',
+                                        'component': 'VRow',
                                         'props': {
-                                            'multiple': True,
-                                            'chips': True,
-                                            'model': 'msgtypes',
-                                            'label': '消息类型',
-                                            'items': MsgTypeOptions
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'props': {
-                            'align': 'center'
-                        },
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 3
-                                },
-                                'content': [
+                                            'align': 'center'
+                                        },
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 3,
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VSwitch',
+                                                        'props': {
+                                                            'model': 'save',
+                                                            'label': '写入自定义模板',
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 3,
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VSwitch',
+                                                        'props': {
+                                                            'model': 'reset',
+                                                            'label': '恢复默认模板',
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 6,
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VAlert',
+                                                        'props': {
+                                                            'type': 'info',
+                                                            'variant': 'tonal',
+                                                            'text': '重置插件不会重置自定义模板配置，请放心使用！'
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
                                     {
-                                        'component': 'VSwitch',
-                                        'props': {
-                                            'model': 'custom',
-                                            'label': '启用自定义模板',
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 9
-                                },
-                                'content': [
+                                        'component': 'VRow',
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VAceEditor',
+                                                        'props': {
+                                                            'modelvalue': 'content',
+                                                            'lang': 'html',
+                                                            'theme': 'monokai',
+                                                            'style': 'height: 20rem; font-size: 14px;',
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
                                     {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'warning',
-                                            'variant': 'tonal',
-                                            'text': '开启"写入自定义模板"后，"恢复默认模板"不会生效！配置在写入后才会生效！'
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'props': {
-                            'align': 'center'
-                        },
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 3,
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VSwitch',
-                                        'props': {
-                                            'model': 'save',
-                                            'label': '写入自定义模板',
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 3,
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VSwitch',
-                                        'props': {
-                                            'model': 'reset',
-                                            'label': '恢复默认模板',
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 6,
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'info',
-                                            'variant': 'tonal',
-                                            'text': '重置插件不会重置自定义模板配置，请放心使用！'
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VAceEditor',
-                                        'props': {
-                                            'modelvalue': 'content',
-                                            'lang': 'html',
-                                            'theme': 'monokai',
-                                            'style': 'height: 20rem; font-size: 14px;',
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'info',
-                                            'variant': 'tonal',
-                                            'text': "自定义配置支持的变量："
-                                                    "类型：{msg_type}、用户ID：{userid}、"
-                                                    "标题：{title}、内容：{text}、图片：cid:image。"
-                                        }
-                                    }
+                                        'component': 'VRow',
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VAlert',
+                                                        'props': {
+                                                            'type': 'info',
+                                                            'variant': 'tonal',
+                                                            'text': "自定义配置支持的变量："
+                                                                    "类型：{msg_type}、用户ID：{userid}、"
+                                                                    "标题：{title}、内容：{text}、图片：cid:image。"
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
                                 ]
                             }
                         ]
@@ -865,7 +890,7 @@ class SmtpMsg(_PluginBase):
             # 恢复默认模板
             'reset': False,
             # 自定义模板内容
-            'content': self.__reset_custom_template(),
+            'content': self.custom_template.read_text(encoding="utf-8"),
 
             # 消息类型
             'msgtypes': [],
@@ -1099,36 +1124,39 @@ class SmtpMsg(_PluginBase):
             # 读取模板文件
             try:
                 logger.debug("开始读取邮件正文模板文件")
-                if self._custom:
-                    logger.debug("使用自定义邮件模板")
-                    template_path = self.custom_template
-                else:
+                if not self._custom:
                     logger.debug("使用默认邮件模板")
-                    template_path = self.default_template
-                with open(template_path, "r", encoding="utf-8") as template_file:
+                    template = self.default_template
+                else:
+                    logger.debug("使用自定义邮件模板")
+                    template = self.custom_template
+
+                with open(template, "r", encoding="utf-8") as template_file:
                     template_content = template_file.read()
                     logger.debug("邮件正文模板文件读取成功，开始构建邮件正文")
-                    template_content = template_content.format(text=text, image=image, title=title, userid=userid,
-                                                               msg_type=msg_type)
-                    if self._image_send and image:
-                        try:
-                            logger.debug("开始嵌入图片文件到邮件正文中")
-                            with open(image, 'rb') as image_file:
-                                message_image = MIMEImage(image_file.read())
 
-                                message_image.add_header('Content-ID', '<image>')
-                                message.attach(message_image)
-                                logger.debug("图片文件嵌入成功")
+                msg_html = template_content.format(text=text, image=image, title=title, userid=userid,
+                                                   msg_type=msg_type)
 
-                        except ImportError:
-                            logger.warning("图片文件无法嵌入到邮件正文中")
+                if self._image_send and image:
+                    try:
+                        logger.debug("开始嵌入图片文件到邮件正文中")
+                        with open(image, 'rb') as image_file:
+                            message_image = MIMEImage(image_file.read())
 
-                    elif not self._image_send:
-                        logger.debug("不发送图片")
+                            message_image.add_header('Content-ID', '<image>')
+                            message.attach(message_image)
+                            logger.debug("图片文件嵌入成功")
 
-                    # 构建邮件正文
-                    html_part = MIMEText(template_content, 'html', 'utf-8')
-                    message_alternative.attach(html_part)
+                    except ImportError:
+                        logger.warning("图片文件无法嵌入到邮件正文中")
+
+                elif not self._image_send:
+                    logger.debug("不发送图片")
+
+                # 构建邮件正文
+                html_part = MIMEText(msg_html, 'html', 'utf-8')
+                message_alternative.attach(html_part)
 
                 logger.debug("邮件内容构建成功")
                 return message
