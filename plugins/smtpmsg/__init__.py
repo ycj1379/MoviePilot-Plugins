@@ -22,7 +22,7 @@ class SmtpMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "2.0"
+    plugin_version = "2.1"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -201,7 +201,7 @@ class SmtpMsg(_PluginBase):
             # 参数配置不完整，关闭插件
             if (not self._main_smtp_host or
                     not self._main_smtp_port or
-                    not self._main_smtp_encryption or
+                    (self._main_smtp_encryption is None) or
                     not self._main_sender_mail or
                     not self._main_sender_password):
                 # 关闭插件
