@@ -279,7 +279,7 @@ class SmtpMsg(_PluginBase):
                                         'component': 'VSwitch',
                                         'props': {
                                             'model': 'enabled',
-                                            'label': '启用插件v2.0',
+                                            'label': '启用插件',
                                         }
                                     }
                                 ]
