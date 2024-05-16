@@ -1,4 +1,7 @@
 import shutil
+import socket
+from email.errors import HeaderParseError
+from pathlib import Path
 from typing import Any, List, Dict, Tuple
 
 import smtplib
@@ -6,9 +9,9 @@ from email.mime.text import MIMEText
 from email.header import Header
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
-
 from app.core.config import settings
 from app.core.event import eventmanager, Event
+# from app.core.plugin import PluginManager
 from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas.types import EventType, NotificationType
@@ -22,7 +25,7 @@ class SmtpMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "2.1"
+    plugin_version = "2.2"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -35,48 +38,35 @@ class SmtpMsg(_PluginBase):
     auth_level = 1
 
     # 私有属性
-    _test_image = "/public/plugin_icon/Synomail_A.png"
-    # 插件开关
-    _enabled = False
-    # 发送图片开关
-    _image_send = False
-    # 备用服务器开关
-    _secondary = False
-    # 发送测试消息
-    _test = False
-    # 自定义模板
-    _custom = False
-    # 保存自定义模板
-    _save = False
-    # 恢复默认模板
-    _reset = False
+    _enabled: bool = False
+    _send_image: bool = False
+    _secondary: bool = False
+    _test: bool = False
+    _log_more: bool = False
+    _enabled_customizable_mail_template: bool = False
+    _save: bool = False
+    _reset: bool = False
+    _enabled_msg_rules: bool = False
+    _enabled_customizable_msg_rules: bool = False
 
-    # 默认模板路径
-    default_template = settings.ROOT_PATH / "app" / "plugins" / "smtpmsg" / "template" / "default.html"
-    # 自定义模板目录
-    custom_template_dir = settings.PLUGIN_DATA_PATH / "smtpmsg" / "template"
-    # 自定义模板路径
-    custom_template = custom_template_dir / "custom.html"
+    default_template: Path = settings.ROOT_PATH / "app" / "plugins" / "smtpmsg" / "template" / "default.html"
+    custom_template_dir: Path = settings.PLUGIN_DATA_PATH / "smtpmsg" / "template"
+    custom_template: Path = custom_template_dir / "custom.html"
+    _test_image: Path = "/public/plugin_icon/Synomail_A.png"
 
-    # 主服务器-地址/端口/加密方式
-    _main_smtp_host = None
-    _main_smtp_port = None
-    _main_smtp_encryption = None
-    # 主服务器-账号/密码
-    _main_sender_mail = None
-    _main_sender_password = None
+    _main_smtp_host: str = None
+    _main_smtp_port: int = None
+    _main_smtp_encryption: str = "not_encrypted"
+    _main_sender_mail: str = None
+    _main_sender_password: str = None
+    _secondary_smtp_host: str = None
+    _secondary_smtp_port: int = None
+    _secondary_smtp_encryption: str = "not_encrypted"
+    _secondary_sender_mail: str = None
+    _secondary_sender_password: str = None
 
-    # 备用服务器-地址/端口/加密方式
-    _secondary_smtp_host = None
-    _secondary_smtp_port = None
-    _secondary_smtp_encryption = None
-    # 备用服务器-账号/密码
-    _secondary_sender_mail = None
-    _secondary_sender_password = None
-
-    # 发件人用户名与收件人地址
-    _sender_name = None
-    _receiver_mail = None
+    _sender_name: str = None
+    _receiver_mail: str = None
 
     # 消息类型
     _msgtypes = []
@@ -86,117 +76,128 @@ class SmtpMsg(_PluginBase):
         """
         初始化插件
         """
-        logger.info(f"初始化插件 {self.plugin_name}")
-
+        logger.info(f"汇报 - 初始化插件 - {self.plugin_name}")
+        # 读取配置
         if config:
-            # 插件开关
-            self._enabled = config.get("enabled")
-            # 发送图片开关
-            self._image_send = config.get("image_send")
-            # 备用服务器开关
+            self._enabled = config.get("enabled", False)
+            self._send_image = config.get("enabled_image_send", True)
             self._secondary = config.get("secondary")
-            # 测试开关
-            self._test = config.get("test")
-            # 自定义模板
-            self._custom = config.get("custom")
-            # 保存自定义模板
-            self._save = config.get("save")
-            # 恢复默认模板
-            self._reset = config.get("reset")
+            self._test = config.get("test", False)
+            self._log_more = config.get("log_more", False)
+            self._enabled_customizable_mail_template = config.get("enabled_customizable_mail_template", False)
+            self._save = config.get("save", False)
+            self._reset = config.get("reset", False)
+            self._enabled_msg_rules = config.get("enabled_msg_rules", False)
+            self._enabled_customizable_msg_rules = config.get("enabled_customizable_msg_rules", False)
+            self._main_smtp_host = config.get("main_smtp_host", )
+            self._main_smtp_port = config.get("main_smtp_port", )
+            self._main_smtp_encryption = config.get("main_smtp_encryption", "not_encrypted")
+            self._main_sender_mail = config.get("main_sender_mail", )
+            self._main_sender_password = config.get("main_sender_password", )
+            self._secondary_smtp_host = config.get("secondary_smtp_host", )
+            self._secondary_smtp_port = config.get("secondary_smtp_port", )
+            self._secondary_smtp_encryption = config.get("secondary_smtp_encryption", "not_encrypted")
+            self._secondary_sender_mail = config.get("secondary_sender_mail", )
+            self._secondary_sender_password = config.get("secondary_sender_password", )
+            self._sender_name = config.get("sender_name", )
+            self._receiver_mail = config.get("receiver_mail", "")
+            self._msgtypes = config.get("msgtypes", [])
+            self._content = config.get("content", self.custom_template.read_text(encoding="utf-8"))
 
-            # 主服务器
-            self._main_smtp_host = config.get("main_smtp_host")
-            self._main_smtp_port = config.get("main_smtp_port")
-            self._main_smtp_encryption = config.get("main_smtp_encryption")
-            self._main_sender_mail = config.get("main_sender_mail")
-            self._main_sender_password = config.get("main_sender_password")
+        self._check_file()
 
-            # 备用服务器
-            self._secondary_smtp_host = config.get("secondary_smtp_host")
-            self._secondary_smtp_port = config.get("secondary_smtp_port")
-            self._secondary_smtp_encryption = config.get("secondary_smtp_encryption")
-            self._secondary_sender_mail = config.get("secondary_sender_mail")
-            self._secondary_sender_password = config.get("secondary_sender_password")
+        # 开始运行插件
+        self._template_settings()
+        self._run_plugin()
 
-            # 发件人类型
-            self._sender_name = config.get("sender_name")
-            self._receiver_mail = config.get("receiver_mail")
-
-            # 消息类型
-            self._msgtypes = config.get("msgtypes") or []
-            # 自定义模板内容
-            self._content = config.get("content") or ""
-
-            # 检查自定义模板是否存在
-            self.check_custom_template()
-
-            # 状态判断
-            self.__on_config_change(config=config)
-
-    def check_custom_template(self):
+    def _check_file(self):
         """
-        检查自定义模板
+        检查文件
         """
-        # 自定义模板不存在，创建模板文件
-        if not self.custom_template.exists():
-            self.custom_template_dir.mkdir(parents=True, exist_ok=True)
-            self.custom_template.touch()
-            # 如果_content不为空，写入自定义模板
-            if self._content:
-                self.custom_template.write_text(self._content, encoding="utf-8")
-            # 否则，复制默认模板到自定义模板
-            else:
-                self.default_template.replace(self.custom_template)
-            logger.warning(f"自定义邮件模板文件不存在，已创建模板文件！")
+        mode_name = "文件检查"
+        level = 1
+        msg = "没有日志信息"
+        self._mode_log(level=level, mode_name=mode_name, msg='开始运行')
+        try:
+            # 自定义模板不存在，创建模板文件
+            if not self.custom_template.exists():
+                self.custom_template_dir.mkdir(parents=True, exist_ok=True)
+                self.custom_template.touch()
+                # 如果_content不为空，写入自定义模板
+                if self._content:
+                    self.custom_template.write_text(self._content, encoding="utf-8")
+                    msg = "自定义邮件模板文件不存在，已创建模板文件，已将数据库内配置写入文件"
+                # 否则，复制默认模板到自定义模板
+                else:
+                    self.default_template.replace(self.custom_template)
+                    msg = "自定义邮件模板文件不存在，已创建模板文件，数据库内没有该项配置，还原使用默认配置"
 
-        # 自定义模板存在
-        elif self.custom_template.exists():
-            # 读取自定义模板内容
-            # 判断self._content与自定义模板内容是否一致
-            if (self._save is not True
-                    and self._reset is not True
-                    and self._content != self.custom_template.read_text(encoding="utf-8")):
-                # 更新配置与显示
-                self._content = self.custom_template.read_text(encoding="utf-8")
-                self.update_config({"content": self._content})
-            else:
-                logger.debug(f"自定义邮件模板文件已存在！")
+            # 自定义模板存在
+            elif self.custom_template.exists():
+                # 判断self._content与自定义模板内容是否一致
+                if (self._save is not True
+                        and self._reset is not True
+                        and self._content != self.custom_template.read_text(encoding="utf-8")):
+                    # 更新配置与显示
+                    self._content = self.custom_template.read_text(encoding="utf-8")
+                    self.__update_config()
+                    msg = "自定义邮件模板文件已存在，但与数据库内缓存不一致，提取文件配置并覆盖数据库配置"
+                else:
+                    msg = '自定义邮件模板文件已存在'
+            level = 1
 
-    def __on_config_change(self, config: dict):
+        except Exception as e:
+            level = -1
+            msg = f"文件检查失败 - 原因 - {e}"
+
+        finally:
+            self._mode_log(level=level, mode_name=mode_name, msg=msg)
+
+    def _template_settings(self):
         """
-        状态判断
+        模板类按钮状态判断
         """
+        mode_name = "模板功能"
+        level = 1
+        msg = "没有日志信息"
+        self._mode_log(level=level, mode_name=mode_name, msg='开始运行')
         tag = "" if self._enabled else "未开启，"
-        # 保存自定义模板
-        if self._save is True:
-            if self._reset is True:
-                config.update({"reset": False})
-                # 更新配置
-                self.update_config(config)
-                logger.warning(f"自定义模板与恢复默认模板不可同时启动，关闭恢复默认模板按钮！")
-                self.systemmessage.put(f"{self.plugin_name}自定义模板与恢复默认模板不可同时启动，关闭恢复默认模板按钮！")
-            # 写入自定义模板文件
-            self.custom_template.write_text(self._content, encoding="utf-8")
-            # 保存存自定义模板，更新显示，并关闭开关
-            config.update({"save": False, "content": self._content})
-            # 更新配置
-            self.update_config(config)
-            logger.info(f"{self.plugin_name}{tag}自定义邮件模板保存成功！")
-            self.systemmessage.put(f"{self.plugin_name}{tag}自定义邮件模板保存成功！")
-
-        # 恢复默认模板
-        elif self._save is not True and self._reset is True:
+        try:
+            # 保存自定义模板
+            if self._save is True:
+                if self._reset is True:
+                    self._reset = False
+                    self.__update_config()
+                    msg = f"自定义模板与恢复默认模板不可同时启动，关闭恢复默认模板按钮！"
+                    self._mode_log(level=2, mode_name=mode_name, msg=msg)
+                    self.systemmessage.put(f"{msg}")
+                self.custom_template.write_text(self._content, encoding="utf-8")
+                self._save = False
+                self.__update_config()
+                level = 0
+                msg = "自定义邮件模板保存成功！"
             # 恢复默认模板
-            shutil.copy(self.default_template, self.custom_template)
-            # 更新显示，关闭恢复默认模板开关
-            self._content = self.custom_template.read_text(encoding="utf-8")
-            config.update({"reset": False, "content": self._content})
-            # 更新配置
-            self.update_config(config)
-            logger.info(f"{self.plugin_name}{tag}默认邮件模板恢复成功！")
-            self.systemmessage.put(f"{self.plugin_name}{tag}默认邮件模板恢复成功！")
+            elif self._save is not True and self._reset is True:
+                shutil.copy(self.default_template, self.custom_template)
+                self._content = self.custom_template.read_text(encoding="utf-8")
+                self._reset = False
+                self.__update_config()
+                level = 0
+                msg = "默认邮件模板恢复成功！"
+            else:
+                msg = "自定义邮件模板功能未开启"
+            if level == 0:
+                self.systemmessage.put(f"{self.plugin_name}{tag}{msg}")
+        except Exception as e:
+            level = -1
+            msg = f"自定义模板功能运行失败 - 原因 - {e}"
+        finally:
+            self._mode_log(level=level, mode_name=mode_name, msg=msg)
 
+    def _run_plugin(self):
+        """
         # 启用插件
+        """
         if self._enabled:
             # 参数配置不完整，关闭插件
             if (not self._main_smtp_host or
@@ -205,40 +206,19 @@ class SmtpMsg(_PluginBase):
                     not self._main_sender_mail or
                     not self._main_sender_password):
                 # 关闭插件
-                config.update({"enabled": False, "test": False})
-                self.update_config(config)
+                self._enabled = False
+                self._test = False
+                self.__update_config()
                 logger.warning(f"参数配置不完整，关闭插件")
-                self.systemmessage.put(f"{self.plugin_name}参数配置不完整，关闭插件！")
+                self.systemmessage.put(f"{self.plugin_name}插件参数配置不完整，关闭插件！")
+                return
 
             # 测试邮件
-            elif self._test:
-                m_success, s_success = self.send_to_smtp(test=True,
-                                                         secondary=self._secondary,
-                                                         title="",
-                                                         text="这是一封测试邮件~~~",
-                                                         image=self._test_image,
-                                                         _smtp_settings=self._merge_config())
-
-                if m_success:
-                    if s_success:
-                        message = "所有服务器测试邮件发送成功！"
-                        logger.info(f"{message}")
-                    else:
-                        message = "主服务器测试邮件发送成功！备用服务器测试邮件发送失败！" if s_success is not None else "主服务器测试邮件发送成功！未启动备用服务器！"
-                        logger.warning(f"{message}")
-                else:
-                    if s_success:
-                        message = "备用服务器测试邮件发送成功！主服务器测试邮件发送失败！"
-                        logger.warning(f"{message}")
-                    else:
-                        message = "所有服务器测试邮件发送失败！" if s_success is not None else "服务器未启动！无法测试！"
-                        logger.error(f"{message}")
-                # 关闭测试开关
-                config.update({"test": False})
-                # 更新配置
-                self.update_config(config)
-                logger.info(f"{message}")
-                self.systemmessage.put(message)
+            if self._test:
+                msg = self.master_program()
+                self._test = False
+                self.__update_config()
+                self.systemmessage.put(msg)
 
     def get_state(self) -> bool:
         return self._enabled
@@ -251,7 +231,11 @@ class SmtpMsg(_PluginBase):
         pass
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
-        # 编历 NotificationType 枚举，生成消息类型选项
+        EncryptionTypeOptions = [{'title': '不加密', 'value': 'not_encrypted'},
+                                 {'title': 'SSL', 'value': 'ssl'},
+                                 {'title': 'TLS', 'value': 'tls'},
+                                 ],
+
         MsgTypeOptions = []
         for item in NotificationType:
             MsgTypeOptions.append({
@@ -259,7 +243,16 @@ class SmtpMsg(_PluginBase):
                 "value": item.name
             })
 
-        encryption_options = ["不加密", "SSL", "TLS"]
+        # Todo: 消息过滤使用，获取插件列表
+        # plugin_manager = PluginManager()
+        # local_plugins = plugin_manager.get_local_plugins()
+        # PluginTypeOptions = []
+        #
+        # for index, local_plugin in enumerate(local_plugins, start=1):
+        #     PluginTypeOptions.append({
+        #         "title": f"{local_plugin.plugin_name}",
+        #         "value": local_plugin.id
+        #     })
 
         return [
             {
@@ -294,24 +287,8 @@ class SmtpMsg(_PluginBase):
                                     {
                                         'component': 'VSwitch',
                                         'props': {
-                                            'model': 'image_send',
+                                            'model': 'enabled_image_send',
                                             'label': '发送图片',
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 3
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VSwitch',
-                                        'props': {
-                                            'model': 'secondary',
-                                            'label': '启用备用服务器',
                                         }
                                     }
                                 ]
@@ -332,6 +309,22 @@ class SmtpMsg(_PluginBase):
                                     }
                                 ]
                             },
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 3
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'log_more',
+                                            'label': '记录更多日志',
+                                        }
+                                    }
+                                ]
+                            },
                         ]
                     },
                     {
@@ -341,6 +334,23 @@ class SmtpMsg(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
+                                    'md': 3
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'secondary',
+                                            'label': '启用备用服务器',
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 9
                                 },
                                 'content': [
                                     {
@@ -348,7 +358,7 @@ class SmtpMsg(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '打开 "启动备用服务器" 后，会在 "服务器" 发送失败时，尝试使用 "备用服务器" 发送消息。'
+                                            'text': '启动备用服务器后，会在主服务器发送失败时，会尝试使用备用服务器发送消息。'
                                         }
                                     }
                                 ]
@@ -414,6 +424,20 @@ class SmtpMsg(_PluginBase):
                                 },
                                 'text': '自定义邮件模板'
                             },
+                            # Todo: 未完成，暂时不显示
+                            # {
+                            #     'component': 'VTab',
+                            #     'disabled': "true",
+                            #     'props': {
+                            #         'value': 'msg_rules',
+                            #         'style': {
+                            #             'padding-top': '10px',
+                            #             'padding-bottom': '10px',
+                            #             'font-size': '16px'
+                            #         },
+                            #     },
+                            #     'text': '消息过滤'
+                            # },
                         ]
                     },
                     {
@@ -451,6 +475,7 @@ class SmtpMsg(_PluginBase):
                                                                     'model': 'main_smtp_host',
                                                                     'label': 'SMTP服务器地址',
                                                                     'placeholder': 'smtp.example.com',
+                                                                    'clearable': True
                                                                 }
                                                             }
                                                         ]
@@ -468,6 +493,7 @@ class SmtpMsg(_PluginBase):
                                                                     'model': 'main_smtp_port',
                                                                     'label': 'SMTP服务器端口',
                                                                     'placeholder': '常见：25、465、587、995……',
+                                                                    'clearable': True
                                                                 }
                                                             }
                                                         ]
@@ -484,7 +510,7 @@ class SmtpMsg(_PluginBase):
                                                                 'props': {
                                                                     'model': 'main_smtp_encryption',
                                                                     'label': '加密方式',
-                                                                    'items': encryption_options
+                                                                    'items': EncryptionTypeOptions,
                                                                 }
                                                             }
                                                         ]
@@ -505,8 +531,9 @@ class SmtpMsg(_PluginBase):
                                                                 'component': 'VTextField',
                                                                 'props': {
                                                                     'model': 'main_sender_mail',
-                                                                    'label': 'SMTP邮箱',
+                                                                    'label': 'SMTP邮箱账号',
                                                                     'placeholder': 'example@example.com',
+                                                                    'clearable': True
                                                                 }
                                                             }
                                                         ]
@@ -523,7 +550,8 @@ class SmtpMsg(_PluginBase):
                                                                 'props': {
                                                                     'model': 'main_sender_password',
                                                                     'label': 'SMTP邮箱密码/Token',
-                                                                    'placeholder': 'Passwd or Token'
+                                                                    'placeholder': 'Passwd or Token',
+                                                                    'clearable': True
                                                                 }
                                                             }
                                                         ]
@@ -560,6 +588,7 @@ class SmtpMsg(_PluginBase):
                                                             'model': 'secondary_smtp_host',
                                                             'label': '备用SMTP服务器地址',
                                                             'placeholder': 'smtp.example.com',
+                                                            'clearable': True
                                                         }
                                                     }
                                                 ]
@@ -577,6 +606,7 @@ class SmtpMsg(_PluginBase):
                                                             'model': 'secondary_smtp_port',
                                                             'label': '备用SMTP服务器端口',
                                                             'placeholder': '常见：25、465、587、995……',
+                                                            'clearable': True
                                                         }
                                                     }
                                                 ]
@@ -593,7 +623,7 @@ class SmtpMsg(_PluginBase):
                                                         'props': {
                                                             'model': 'secondary_smtp_encryption',
                                                             'label': '加密方式',
-                                                            'items': encryption_options
+                                                            'items': EncryptionTypeOptions,
                                                         }
                                                     }
                                                 ]
@@ -614,8 +644,9 @@ class SmtpMsg(_PluginBase):
                                                         'component': 'VTextField',
                                                         'props': {
                                                             'model': 'secondary_sender_mail',
-                                                            'label': '备用SMTP邮箱',
+                                                            'label': '备用SMTP邮箱账号',
                                                             'placeholder': 'example@example.com',
+                                                            'clearable': True
                                                         }
                                                     }
                                                 ]
@@ -632,7 +663,8 @@ class SmtpMsg(_PluginBase):
                                                         'props': {
                                                             'model': 'secondary_sender_password',
                                                             'label': '备用SMTP邮箱密码/Token',
-                                                            'placeholder': 'Passwd or Token'
+                                                            'placeholder': 'Passwd or Token',
+                                                            "clearable": True
                                                         }
                                                     }
                                                 ]
@@ -667,6 +699,7 @@ class SmtpMsg(_PluginBase):
                                                             'model': 'sender_name',
                                                             'label': '发件人用户名',
                                                             'placeholder': '不输入时，默认使用发件人邮箱作为发件人用户名',
+                                                            'clearable': True
                                                         }
                                                     }
                                                 ]
@@ -700,13 +733,14 @@ class SmtpMsg(_PluginBase):
                                                 },
                                                 'content': [
                                                     {
-                                                        'component': 'VSelect',
+                                                        'component': 'VAutocomplete',
                                                         'props': {
                                                             'multiple': True,
                                                             'chips': True,
                                                             'model': 'msgtypes',
                                                             'label': '消息类型',
-                                                            'items': MsgTypeOptions
+                                                            'items': MsgTypeOptions,
+                                                            'clearable': True
                                                         }
                                                     }
                                                 ]
@@ -741,7 +775,7 @@ class SmtpMsg(_PluginBase):
                                                     {
                                                         'component': 'VSwitch',
                                                         'props': {
-                                                            'model': 'custom',
+                                                            'model': 'enabled_customizable_mail_template',
                                                             'label': '启用自定义模板',
                                                         }
                                                     }
@@ -859,9 +893,31 @@ class SmtpMsg(_PluginBase):
                                                         'props': {
                                                             'type': 'info',
                                                             'variant': 'tonal',
-                                                            'text': "自定义配置支持的变量："
-                                                                    "类型：{msg_type}、用户ID：{userid}、"
-                                                                    "标题：{title}、内容：{text}、图片：cid:image。"
+                                                            'text': "支持的变量："
+                                                                    "类型：{msg_type}、用户ID：{userid}、标题：{title}、"
+                                                                    "内容：{text}、图片：cid:image。"
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        'component': 'VRow',
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VAlert',
+                                                        'props': {
+                                                            'type': 'info',
+                                                            'variant': 'tonal',
+                                                            'text': '电脑端可用 "ctrl" + "/" '
+                                                                    '快捷键来快速打开/关闭需要注释的内容。'
                                                         }
                                                     }
                                                 ]
@@ -869,54 +925,326 @@ class SmtpMsg(_PluginBase):
                                         ]
                                     },
                                 ]
-                            }
+                            },
+                    #         {
+                    #             'component': 'VWindowItem',
+                    #             'props': {
+                    #                 'value': 'msg_rules',
+                    #                 'style': {
+                    #                     'padding-top': '20px',
+                    #                     'padding-bottom': '20px'
+                    #                 },
+                    #             },
+                    #             'content': [
+                    #                 {
+                    #                     'component': 'VRow',
+                    #                     'props': {
+                    #                         'align': 'center'
+                    #                     },
+                    #                     'content': [
+                    #                         {
+                    #                             'component': 'VCol',
+                    #                             'props': {
+                    #                                 'cols': 12,
+                    #                                 'md': 3
+                    #                             },
+                    #                             'content': [
+                    #                                 {
+                    #                                     'component': 'VSwitch',
+                    #                                     'props': {
+                    #                                         'model': 'enabled_msg_rules',
+                    #                                         'label': '启用消息过滤',
+                    #                                     }
+                    #                                 }
+                    #                             ]
+                    #                         },
+                    #                         {
+                    #                             'component': 'VCol',
+                    #                             'props': {
+                    #                                 'cols': 12,
+                    #                                 'md': 3
+                    #                             },
+                    #                             'content': [
+                    #                                 {
+                    #                                     'component': 'VSwitch',
+                    #                                     'props': {
+                    #                                         'model': 'enabled_customizable_msg_rules',
+                    #                                         'label': '启用自定义过滤规则',
+                    #                                     }
+                    #                                 }
+                    #                             ]
+                    #                         },
+                    #                         {
+                    #                             "component": "VCol",
+                    #                             "props": {
+                    #                                 "cols": 12,
+                    #                                 "md": 4
+                    #                             },
+                    #                             "content": [
+                    #                                 {
+                    #                                     "component": "VSwitch",
+                    #                                     "props": {
+                    #                                         "model": "dialog_closed",
+                    #                                         "label": "打开自定义过滤规则设置窗口"
+                    #                                     }
+                    #                                 }
+                    #                             ]
+                    #                         },
+                    #                     ]
+                    #                 },
+                    #                 {
+                    #                     'component': 'VRow',
+                    #                     'content': [
+                    #                         {
+                    #                             'component': 'VCol',
+                    #                             'props': {
+                    #                                 'cols': 12,
+                    #                             },
+                    #                             'content': [
+                    #                                 {
+                    #                                     'component': 'VAlert',
+                    #                                     'props': {
+                    #                                         'type': 'info',
+                    #                                         'variant': 'tonal',
+                    #                                         'text': '该功能为结合已安装插件的插件名，对消息内容进行二次过滤；'
+                    #                                                 '不启用自定义过滤规则时，默认屏蔽整个插件的消息。'
+                    #                                     }
+                    #                                 }
+                    #                             ]
+                    #                         }
+                    #                     ]
+                    #                 },
+                    #                 {
+                    #                     'component': 'VRow',
+                    #                     'content': [
+                    #                         {
+                    #                             'component': 'VCol',
+                    #                             'props': {
+                    #                                 'cols': 12,
+                    #                             },
+                    #                             'content': [
+                    #                                 {
+                    #                                     'component': 'VAutocomplete',
+                    #                                     'props': {
+                    #                                         'multiple': True,
+                    #                                         'chips': True,
+                    #                                         'model': 'allow_plugins',
+                    #                                         'label': '需要管理的插件',
+                    #                                         'placeholder': '留空，则默认选择所有插件。',
+                    #                                         'items': PluginTypeOptions,
+                    #                                         "clearable": True,
+                    #                                     }
+                    #                                 }
+                    #                             ]
+                    #                         },
+                    #                     ]
+                    #                 },
+                    #                 {
+                    #                     'component': 'VRow',
+                    #                     'content': [
+                    #                         {
+                    #                             'component': 'VCol',
+                    #                             'props': {
+                    #                                 'cols': 12
+                    #
+                    #                             },
+                    #                             'content': [
+                    #                                 {
+                    #                                     'component': 'VAutocomplete',
+                    #                                     'props': {
+                    #                                         'multiple': True,
+                    #                                         'chips': True,
+                    #                                         'model': 'block_plugins',
+                    #                                         'label': '需要排除的插件',
+                    #                                         'placeholder': '留空，则默认不过滤任何插件。',
+                    #                                         'items': PluginTypeOptions,
+                    #                                         'clearable': True,
+                    #                                     }
+                    #                                 }
+                    #                             ]
+                    #                         },
+                    #                     ]
+                    #                 },
+                    #                 {
+                    #                     'component': 'VRow',
+                    #                     'content': [
+                    #                         {
+                    #                             'component': 'VCol',
+                    #                             'props': {
+                    #                                 'cols': 12,
+                    #                             },
+                    #                             'content': [
+                    #                                 {
+                    #                                     'component': 'VAlert',
+                    #                                     'props': {
+                    #                                         'type': 'warning',
+                    #                                         'variant': 'tonal',
+                    #                                         'text': '目前只支持插件名与邮件主题名一致的插件；'
+                    #                                                 '邮件主题 =【插件名】、{title} = '
+                    #                                                 '【{local_plugin.plugin_name}】。'
+                    #                                     }
+                    #                                 }
+                    #                             ]
+                    #                         }
+                    #                     ]
+                    #                 },
+                    #             ]
+                    #         },
+                    #     ]
+                    # },
+                    # {
+                    #     "component": "VDialog",
+                    #     "props": {
+                    #         "model": "dialog_closed",
+                    #         "max-width": "65rem",
+                    #         "overlay-class": "v-dialog--scrollable v-overlay--scroll-blocked",
+                    #         "content-class": "v-card v-card--density-default v-card--variant-elevated rounded-t"
+                    #     },
+                    #     "content": [
+                    #         {
+                    #             "component": "VCard",
+                    #             "props": {
+                    #                 "title": "设置自定义过滤规则"
+                    #             },
+                    #             "content": [
+                    #                 {
+                    #                     "component": "VDialogCloseBtn",
+                    #                     "props": {
+                    #                         "model": "dialog_closed"
+                    #                     }
+                    #                 },
+                    #                 {
+                    #                     "component": "VCardText",
+                    #                     "props": {},
+                    #                     "content": [
+                    #                         {
+                    #                             'component': 'VRow',
+                    #                             'content': [
+                    #                                 {
+                    #                                     'component': 'VCol',
+                    #                                     'props': {
+                    #                                         'cols': 12,
+                    #                                     },
+                    #                                     'content': [
+                    #                                         {
+                    #                                             'component': 'VAceEditor',
+                    #                                             'props': {
+                    #                                                 'modelvalue': 'site_config',
+                    #                                                 'lang': 'json',
+                    #                                                 'theme': 'monokai',
+                    #                                                 'style': 'height: 30rem',
+                    #                                             }
+                    #                                         }
+                    #                                     ]
+                    #                                 }
+                    #                             ]
+                    #                         },
+                    #                         {
+                    #                             'component': 'VRow',
+                    #                             'content': [
+                    #                                 {
+                    #                                     'component': 'VCol',
+                    #                                     'props': {
+                    #                                         'cols': 12,
+                    #                                     },
+                    #                                     'content': [
+                    #                                         {
+                    #                                             'component': 'VAlert',
+                    #                                             'props': {
+                    #                                                 'type': 'info',
+                    #                                                 'variant': 'tonal'
+                    #                                             },
+                    #                                             'content': [
+                    #                                                 {
+                    #                                                     'component': 'span',
+                    #                                                     'text': '注意：只有启用高级自定义过滤时，该配置项才会生效，详细配置参考：'
+                    #                                                 },
+                    #                                                 {
+                    #                                                     'component': 'a',
+                    #                                                     'props': {
+                    #                                                         'href': 'https://github.com/Aqr-K'
+                    #                                                                 '/MoviePilot-Plugins/blob'
+                    #                                                                 '/main/plugins/smtpmsg',
+                    #                                                         'target': '_blank'
+                    #                                                     },
+                    #                                                     'content': [
+                    #                                                         {
+                    #                                                             'component': 'u',
+                    #                                                             'text': 'README'
+                    #                                                         }
+                    #                                                     ]
+                    #                                                 }
+                    #                                             ]
+                    #                                         },
+                    #                                     ]
+                    #                                 }
+                    #                             ]
+                    #                         },
+                    #                         {
+                    #                             'component': 'VRow',
+                    #                             'content': [
+                    #                                 {
+                    #                                     'component': 'VCol',
+                    #                                     'props': {
+                    #                                         'cols': 12,
+                    #                                     },
+                    #                                     'content': [
+                    #                                         {
+                    #                                             'component': 'VAlert',
+                    #                                             'props': {
+                    #                                                 'type': 'info',
+                    #                                                 'variant': 'tonal',
+                    #                                                 'text': '注意：当"需要管理的插件"中的插件，'
+                    #                                                         '在自定义过滤规则未配置内容时，'
+                    #                                                         '默认过滤整个插件的消息。'
+                    #                                             }
+                    #                                         }
+                    #                                     ]
+                    #                                 }
+                    #                             ]
+                    #                         },
+                    #                     ]
+                    #                 }
+                    #             ]
+                    #         }
                         ]
-                    },
+                    }
                 ]
             }
         ], {
-            # 插件开关
             'enabled': False,
-            # 发送图片开关
-            'image_send': False,
-            # 备用服务器开关
+            'enabled_image_send': True,
             'secondary': False,
-            # 测试开关
             'test': False,
-            # 自定义模板开关
-            'custom': False,
-            # 保存自定义模板
+            'log_more': False,
+            'enabled_customizable_mail_template': False,
             'save': False,
-            # 恢复默认模板
             'reset': False,
-            # 自定义模板内容
+            'enabled_msg_rules': False,
+            'enabled_customizable_msg_rules': False,
             'content': self.custom_template.read_text(encoding="utf-8"),
-
-            # 消息类型
             'msgtypes': [],
-
-            # 主服务器-地址/端口/加密方式
             'main_smtp_host': "",
             'main_smtp_port': "",
-            'main_smtp_encryption': "不加密",
-            # 主服务器-账号/密码
+            'main_smtp_encryption': "not_encrypted",
             'main_sender_mail': "",
             'main_sender_password': "",
-
-            # 备用服务器-地址/端口/加密方式
             'secondary_smtp_host': "",
             'secondary_smtp_port': "",
-            'secondary_smtp_encryption': "不加密",
-            # 备用服务器-账号/密码
+            'secondary_smtp_encryption': "not_encrypted",
             'secondary_sender_mail': "",
             'secondary_sender_password': "",
-
-            # 发件人用户名/收件人地址
-            'sender_name': "MoviePilot",
+            'sender_name': "",
             'receiver_mail': ""
         }
 
     def get_page(self) -> List[dict]:
+        pass
+
+    def stop_service(self):
+        """
+        退出插件
+        """
         pass
 
     @eventmanager.register(EventType.NoticeMessage)
@@ -926,267 +1254,656 @@ class SmtpMsg(_PluginBase):
         """
         if not self.get_state():
             return
-
         if not event.event_data:
             return
-
         msg_body = event.event_data
-        # 渠道
         channel = msg_body.get("channel")
         if channel:
             return
-        # 类型
         msg_type: NotificationType = msg_body.get("type")
-        # 标题
         title = msg_body.get("title")
-        # 文本
         text = msg_body.get("text")
-        # 图片
         image = msg_body.get("image")
-        # 用户id
         userid = msg_body.get("userid")
-
         if not title and not text:
             logger.warning("标题和内容不能同时为空")
             return
-
         if (msg_type and self._msgtypes
                 and msg_type.name not in self._msgtypes):
             logger.info(f"消息类型 {msg_type.value} 未开启消息发送")
             return
+        self.master_program(title=title, text=text, msg_type=msg_type, userid=userid, image=image)
 
-        self.send_to_smtp(test=self._test,
-                          userid=userid,
-                          msg_type=str(msg_type),
-                          secondary=self._secondary,
-                          title=title if title is not None else f"【{self.plugin_name}】",
-                          text=text if text is not None else "",
-                          image=image if image is not None else "",
-                          _smtp_settings=self._merge_config())
-
-    def send_to_smtp(self, _smtp_settings, test, secondary, title, text, image="", userid="", msg_type="",
-                     smtp_type="main", message=None, m_success=None, s_success=None):
+    def master_program(self, title=None, text=None, msg_type=None, userid=None, image=None):
         """
-        发送邮件
+        运行主要逻辑
+        :return:
         """
-        # 获取 SMTP 服务器配置
-        smtp_config = _smtp_settings.get(smtp_type)
+        # todo: 消息过滤，待完善
+        # self.__msg_filter(title=title, text=text, msg_type=msg_type, userid=userid)
 
-        if smtp_type == "main":
-            log_type = ""
-            m_success = False
-        elif smtp_type == "secondary":
-            log_type = "备用"
-            s_success = False
-        else:
-            logger.error("未知的SMTP服务器类型")
-            raise ValueError("未知的SMTP服务器类型")
+        m_success = s_success = None
+        success, server_type = self._determine_server(smtp_type=0)
+        # 发送消息
+        if success:
+            m_success = self._send_to_smtp(smtp_value=0, server_type=server_type,
+                                           msg_type=msg_type, title=title, text=text, userid=userid, image=image)
 
-        test_type = "测试" if test else ""
-        logger.info(f"开始使用{log_type}服务器发送{test_type}邮件")
+            success, server_type = self._determine_server(smtp_type=1, success=m_success)
+            if success:
+                s_success = self._send_to_smtp(smtp_value=1, server_type=server_type,
+                                               msg_type=msg_type, title=title, text=text, userid=userid, image=image)
+        # 打印结果
+        msg = self._generate_result_log(m_success, s_success)
+        return msg
 
+    # Todo：读取json格式配置辅助消息过滤功能的实现
+    def __read_json_filter(self):
+        """
+        读取json格式自定义过滤规则
+        """
+        pass
+
+    # Todo：消息过滤功能的实现
+    def __msg_filter(self, title, text, msg_type, userid):
+        """
+        过滤消息
+        """
+        pass
+
+    def _determine_server(self, smtp_type, success=None):
+        """
+        调用判断模块整合版
+        """
+        mode_name = "服务器调用判断"
+        level = 1
+        msg = "没有日志信息"
+        self._mode_log(level=level, mode_name=mode_name, msg='开始运行')
         try:
-            host = smtp_config["host"]
-            port = smtp_config["port"]
-            encryption = smtp_config["encryption"]
-            sender_mail = smtp_config["mail"]
-            password = smtp_config["password"]
-            sender_name = self._sender_name if self._sender_name else sender_mail
-
-            # 连接到 SMTP 服务器
-            server = self._connect_to_smtp_server(host=host, port=port, encryption=encryption, log_type=log_type)
-            # 登录到 SMTP 服务器
-            self._login_to_smtp_server(server=server, sender_mail=sender_mail, password=password, log_type=log_type)
-            # 构建邮件正文
-            if not message:
-                message = self._msg_build(title=title, text=text, image=image, userid=userid, msg_type=msg_type)
-            # 测试模式，修改邮件主题
-            if test:
-                del message['Subject']
-                message['Subject'] = Header(f"测试{log_type}服务器配置", "utf-8")
-            # 发件人与收件人
-            del message['From']
-            message['From'] = f'{sender_name} <{sender_mail}>'
-            if self._receiver_mail:
-                receiver_list = self._receiver_mail.split(",")
+            if smtp_type == 0:
+                server_type = "主"
+            elif smtp_type == 1:
+                server_type = "备用"
             else:
-                logger.warning("收件人地址未配置, 使用发件人地址作为收件人地址")
-                receiver_list = sender_mail
-            # 发送邮件
-            if smtp_type == "main":
-                m_success = self._send_msg_to_smtp(server=server, message=message, sender_mail=sender_mail,
-                                                   receiver_list=receiver_list, log_type=log_type, test_type=test_type)
-            elif smtp_type == "secondary":
-                s_success = self._send_msg_to_smtp(server=server, message=message, sender_mail=sender_mail,
-                                                   receiver_list=receiver_list, log_type=log_type, test_type=test_type)
-                # 备用服务器结果
-                return s_success
+                raise Exception("未知的SMTP服务器类型")
+            status = None
+            if success is None:
+                if smtp_type == 0:
+                    status = True
+            else:
+                if self._test:
+                    status = self._secondary
+                else:
+                    if success:
+                        status = False
+                    else:
+                        status = self._secondary
 
-            # 测试模式，如果同步测试备用服务器
-            if test and secondary and smtp_type == "main":
-                s_success = self.send_to_smtp(test=test, secondary=secondary, message=message, title=title,
-                                              text=text, image=image, _smtp_settings=_smtp_settings,
-                                              smtp_type="secondary", m_success=m_success)
-                return m_success, s_success
-            # 非测试模式，主服务器发送成功不使用备用服务器
-            elif (not test and m_success) or (test and not secondary):
-                return m_success, s_success
-            # 非测试模式，主服务器发送失败 or 测试模式，主服务器发送失败，且为开启备用服务器：抛出异常
-            elif (not test and not m_success) or (not m_success and not secondary):
-                raise ValueError(f"{log_type}服务器发送{test_type}邮件失败")
+            result = "开始调用" if status else "不需要调用"
+            success = status
+            level = 0
+            msg = f'{server_type}服务器调用判断 - {result}'
+            return success, server_type
 
         except Exception as e:
-            logger.warning(f"{log_type}服务器发送{test_type}邮件失败")
-            if not test and not secondary and smtp_type == "main":
-                logger.error("未启动备用服务器，运行失败，请检查配置")
-                logger.debug(e)
+            level = -1
+            msg = f'判断失败 - 原因 - {e}'
+            raise Exception(mode_name)
 
-            elif secondary and smtp_type == "main":
-                s_success = self.send_to_smtp(test=test, secondary=secondary, message=message, title=title,
-                                              text=text, image=image, _smtp_settings=_smtp_settings,
-                                              smtp_type="secondary")
-            elif secondary and smtp_type == "secondary":
-                logger.debug(e)
-                return s_success
-            return m_success, s_success
+        finally:
+            self._mode_log(level=level, mode_name=mode_name, msg=msg)
 
-    def _merge_config(self):
+    def _send_to_smtp(self, smtp_value, server_type, msg_type=None, title=None, text=None, image=None, userid=None):
+        """
+        连接-构建-发送 逻辑
+        """
+        mode_name = f"{server_type}服务器发送逻辑"
+        level = 1
+        msg = "没有日志信息"
+        self._mode_log(level=level, mode_name=mode_name, msg="开始运行")
+        try:
+            if smtp_value == 0:
+                smtp_type = "main"
+            elif smtp_value == 1:
+                smtp_type = "secondary"
+            else:
+                raise Exception("无效的SMTP服务器类型，无法识别")
+
+            # 消息参数校验
+            title, text, image, userid, msg_type = (
+                self._msg_parameter_validation(msg_type=msg_type, title=title, text=text, image=image, userid=userid,
+                                               server_type=server_type))
+            # 读取服务端配置
+            self._get_dict_value(server_type=server_type, smtp_type=smtp_type)
+            # 连接与认证 SMTP 服务器
+            server = self._connect_to_smtp_server(server_type=server_type)
+            # 读取收件人与发件人配置
+            receiver_list, sender_name, sender_mail = self._get_receiver_and_sender()
+            # 构建邮件
+            message = self._msg_build(title=title, text=text, image=image, userid=userid, msg_type=msg_type,
+                                      sender_name=sender_name, sender_mail=sender_mail)
+            # 发送邮件
+            send_status = self._send_msg_to_smtp(server=server, message=message, sender_mail=self._sender_mail,
+                                                 receiver_list=receiver_list, server_type=server_type)
+
+            level = 0
+            msg = "邮件发送成功" if send_status else "邮件发送失败"
+            success = True if send_status else False
+            return success
+
+        except Exception as e:
+            level = -1
+            msg = f'出现模块运行错误 - 出错模块 - "{e}"'
+            success = False
+            return success
+
+        finally:
+            self._mode_log(level=level, mode_name=mode_name, msg=msg)
+
+    def _msg_parameter_validation(self, server_type, msg_type=None, title=None, text=None, image=None, userid=None):
+        """
+        消息参数校验
+        """
+        mode_name = "消息参数校验"
+        level = 1
+        msg = "没有日志信息"
+        self._mode_log(level=level, mode_name=mode_name, msg="开始运行")
+        try:
+            if self._test:
+                msg_type = '测试邮件'
+            else:
+                if isinstance(msg_type, NotificationType):
+                    msg_type = msg_type.value
+                else:
+                    msg_type = "未知的消息类型"
+
+            if self._test:
+                title = f"测试{server_type}服务器配置"
+            else:
+                title = title if title is not None else f"【{self.plugin_name}】"
+
+            if self._test:
+                text = "这是一封测试邮件~~~"
+            else:
+                text = text if text is not None else ""
+
+            if self._test:
+                userid = "测试用户"
+            else:
+                userid = userid if userid is not None else ""
+
+            if self._test:
+                image = self._test_image
+            else:
+                image = image if image is not None else ""
+
+            level = 0
+            msg = f"消息参数校验成功 - 当前消息类型 - {msg_type}"
+            return title, text, image, userid, msg_type
+
+        except Exception as e:
+            level = -1
+            msg = f'邮件变量校验失败 - 原因 - {e}'
+            raise Exception(mode_name)
+
+        finally:
+            self._mode_log(level=level, mode_name=mode_name, msg=msg)
+
+    def __smtp_settings(self):
         """
         整合配置参数
         """
-        _smtp_settings = {
-            "main": {
-                "host": self._main_smtp_host,
-                "port": self._main_smtp_port,
-                "encryption": self._main_smtp_encryption,
-                "mail": self._main_sender_mail,
-                "password": self._main_sender_password,
-            },
-            "secondary": {
-                "host": self._secondary_smtp_host,
-                "port": self._secondary_smtp_port,
-                "encryption": self._secondary_smtp_encryption,
-                "mail": self._secondary_sender_mail,
-                "password": self._secondary_sender_password,
-            }
-        }
+        mode_name = "服务端配置整合"
+        level = 1
+        msg = "没有日志信息"
+        self._mode_log(level=level, mode_name=mode_name, msg='开始运行')
+        try:
+            try:
+                _smtp_settings = {
+                    "main": {
+                        "host": self._main_smtp_host,
+                        "port": self._main_smtp_port,
+                        "encryption": self._main_smtp_encryption,
+                        "mail": self._main_sender_mail,
+                        "password": self._main_sender_password,
+                    },
+                    "secondary": {
+                        "host": self._secondary_smtp_host,
+                        "port": self._secondary_smtp_port,
+                        "encryption": self._secondary_smtp_encryption,
+                        "mail": self._secondary_sender_mail,
+                        "password": self._secondary_sender_password,
+                    }
+                }
 
-        return _smtp_settings
+            except Exception:
+                msg = "出现未知异常"
+                raise Exception(msg)
 
-    @staticmethod
-    def _connect_to_smtp_server(host, port, encryption, log_type):
+            level = 0
+            msg = "配置整合成功"
+            return _smtp_settings
+
+        except Exception as e:
+            msg = f'配置整合失败 - 原因 - {e}'
+            level = -1
+            raise Exception(mode_name)
+
+        finally:
+            self._mode_log(level=level, mode_name=mode_name, msg=msg)
+
+    def _get_dict_value(self, server_type, smtp_type):
+        """
+        获取配置参数
+        """
+        mode_name = "服务端配置提取"
+        level = 1
+        msg = "没有日志信息"
+        self._mode_log(level=level, mode_name=mode_name, msg='开始运行')
+        try:
+            try:
+                _smtp_settings = self.__smtp_settings()
+                self._host = _smtp_settings[smtp_type]["host"]
+                self._port = _smtp_settings[smtp_type]["port"]
+                self._encryption = _smtp_settings[smtp_type]["encryption"]
+                self._sender_mail = _smtp_settings[smtp_type]["mail"]
+                self._password = _smtp_settings[smtp_type]["password"]
+
+            except KeyError:
+                raise Exception('配置参数不完整')
+            except Exception:
+                raise Exception('出现未知异常')
+
+            level = 0
+            msg = f"提取{server_type} SMTP 服务端配置成功"
+
+        except Exception as e:
+            msg = f'提取{server_type} SMTP 服务器配置失败 - 原因 - {e}'
+            level = -1
+            raise Exception(mode_name)
+
+        finally:
+            self._mode_log(level=level, mode_name=mode_name, msg=msg)
+
+    def _get_receiver_and_sender(self):
+        """
+        读取收件人与发件人配置
+        """
+        mode_name = "客户端配置提取"
+        level = 1
+        msg = "没有日志信息"
+        self._mode_log(level=level, mode_name=mode_name, msg='开始运行')
+        try:
+            try:
+                self._mode_log(level=level, mode_name=mode_name,
+                               msg='开始提取收件人配置')
+                if self._receiver_mail:
+                    receiver_list = self._receiver_mail.split(",")
+                else:
+                    self._mode_log(level=level, mode_name=mode_name,
+                                   msg='收件人地址未配置，默认使用发件人地址作为收件人地址')
+                    receiver_list = self._sender_mail
+                    msg = "提取收件人配置成功"
+            except Exception:
+                raise Exception('提取收件人配置失败')
+
+            try:
+                self._mode_log(level=level, mode_name=mode_name,
+                               msg='开始读取发件人配置')
+                sender_name = self._sender_name if self._sender_name else self._sender_mail
+                sender_mail = self._sender_mail
+                msg = "提取发件人配置成功"
+            except Exception:
+                raise Exception('提取发件人配置失败')
+
+            level = 0
+            msg = '配置提取成功'
+            return receiver_list, sender_name, sender_mail
+
+        except Exception as e:
+            msg = f'配置提取失败 - 原因 - {e}'
+            level = -1
+            raise Exception(mode_name)
+
+        finally:
+            self._mode_log(level=level, mode_name=mode_name, msg=msg)
+
+    def _connect_to_smtp_server(self, server_type):
         """
         连接到 SMTP 服务器
         """
-        logger.debug(f"开始尝试连接到{log_type} SMTP 服务器")
+        mode_name = "服务器连接与认证"
+        level = 1
+        msg = "没有日志信息"
+        self._mode_log(level=level, mode_name=mode_name, msg='开始运行')
         try:
-            if encryption == "SSL":
-                server = smtplib.SMTP_SSL(host, port, timeout=5)
-            else:
-                server = smtplib.SMTP(host, port, timeout=5)
-                if encryption == "TLS":
-                    server.starttls()
+            self._mode_log(level=level, mode_name=mode_name,
+                           msg='开始进行连接地址')
+            try:
+                if self._encryption == "ssl":
+                    server = smtplib.SMTP_SSL(self._host, self._port, timeout=5)
+                else:
+                    server = smtplib.SMTP(self._host, self._port, timeout=5)
+                    if self._encryption == "tls":
+                        server.starttls()
 
-            server.ehlo(host)
-            logger.info(f"{log_type}SMTP服务器连接成功")
+                server.ehlo(self._host)
+                self._mode_log(level=level, mode_name=mode_name,
+                               msg="地址连接成功")
+
+            except socket.timeout:
+                raise Exception('建立连接超时')
+            except socket.gaierror:
+                raise Exception('无法解析主机名或 IP 地址')
+            except smtplib.SMTPConnectError:
+                raise Exception('无法建立连接')
+            except smtplib.SMTPResponseException as e:
+                raise Exception(f'返回异常状态码: {e.smtp_code}')
+            except Exception:
+                raise Exception('连接时出现未知异常')
+
+            self._mode_log(level=level, mode_name=mode_name,
+                           msg='开始进行身份验证')
+            try:
+                server.login(self._sender_mail, self._password)
+                self._mode_log(level=level, mode_name=mode_name,
+                               msg="身份验证成功")
+
+            except smtplib.SMTPAuthenticationError:
+                raise Exception('登录失败，用户名或密码错误')
+            except smtplib.SMTPServerDisconnected:
+                raise Exception('连接已断开')
+            except smtplib.SMTPNotSupportedError:
+                raise Exception('不支持所需的身份验证方法')
+            except (smtplib.SMTPException, Exception):
+                raise Exception('登录时出现未知异常')
+
+            level = 0
+            msg = "连接服务器与身份验证成功"
             return server
 
-        except smtplib.SMTPConnectError:
-            logger.error(f"无法与{log_type}SMTP服务器建立连接")
-            raise
+        except Exception as e:
+            msg = f'链接{server_type} SMTP 服务器失败 - 原因 - {e}'
+            level = -1
+            raise Exception(mode_name)
 
-    @staticmethod
-    def _login_to_smtp_server(server, sender_mail, password, log_type):
+        finally:
+            self._mode_log(level=level, mode_name=mode_name, msg=msg)
+
+    def _msg_build(self, title, text, image, userid, msg_type, sender_name, sender_mail, message=None):
         """
-        登录到 SMTP 服务器
+        构建邮件
         """
-        logger.debug(f"开始尝试登录到{log_type} SMTP 服务器")
+        mode_name = "邮件构建"
+        level = 1
+        msg = "没有日志信息"
+        self._mode_log(level=level, mode_name=mode_name, msg='开始运行')
         try:
-            server.login(sender_mail, password)
-            logger.info(f"{log_type}SMTP服务器登录成功")
-
-        except smtplib.SMTPAuthenticationError:
-            logger.error(f"{log_type}SMTP服务器登录失败")
-            raise
-
-    def _msg_build(self, title, text, image, userid, msg_type):
-        """
-        构建邮件正文
-        """
-        logger.debug("开始构建邮件")
-        try:
-            message = MIMEMultipart()
-            message['Subject'] = Header(title, "utf-8")
-            message_alternative = MIMEMultipart('alternative')
-            message.attach(message_alternative)
-            logger.debug("邮件标题构建成功")
-
-            # 读取模板文件
-            try:
-                logger.debug("开始读取邮件正文模板文件")
-                if not self._custom:
-                    logger.debug("使用默认邮件模板")
-                    template = self.default_template
-                else:
-                    logger.debug("使用自定义邮件模板")
-                    template = self.custom_template
-
-                with open(template, "r", encoding="utf-8") as template_file:
-                    template_content = template_file.read()
-                    logger.debug("邮件正文模板文件读取成功，开始构建邮件正文")
-
-                msg_html = template_content.format(text=text, image=image, title=title, userid=userid,
-                                                   msg_type=msg_type)
-
-                if self._image_send and image:
+            # 没有消息体或者发送测试邮件时，构建消息体
+            if not message or self._test is True:
+                message = MIMEMultipart()
+                # 构建邮件内容
+                try:
+                    message_alternative = MIMEMultipart('alternative')
+                    message.attach(message_alternative)
+                    # 读取模板文件
                     try:
-                        logger.debug("开始嵌入图片文件到邮件正文中")
-                        with open(image, 'rb') as image_file:
-                            message_image = MIMEImage(image_file.read())
+                        self._mode_log(level=level, mode_name=mode_name,
+                                       msg='开始读取邮件正文模板文件')
+                        if self._enabled_customizable_mail_template:
+                            self._mode_log(level=level, mode_name=mode_name,
+                                           msg='使用自定义邮件模板')
+                            template = self.custom_template
+                        else:
+                            self._mode_log(level=level, mode_name=mode_name,
+                                           msg='使用默认邮件模板')
+                            template = self.default_template
 
-                            message_image.add_header('Content-ID', '<image>')
-                            message.attach(message_image)
-                            logger.debug("图片文件嵌入成功")
+                        with open(template, "r", encoding="utf-8") as template_file:
+                            template_content = template_file.read()
+                            self._mode_log(level=level, mode_name=mode_name,
+                                           msg='邮件正文模板文件读取成功')
 
-                    except ImportError:
-                        logger.warning("图片文件无法嵌入到邮件正文中")
+                    except FileNotFoundError:
+                        raise Exception("没有找到邮件模板文件")
+                    except PermissionError:
+                        raise Exception("无法读取邮件模板文件")
+                    except IsADirectoryError:
+                        raise Exception("提供了一个目录地址，不是模板文件")
+                    except UnicodeDecodeError:
+                        raise Exception("包含非 UTF-8 编码的内容，尝试用 UTF-8 编码读取邮件模板失败")
+                    except Exception:
+                        raise Exception("邮件模板文件读取失败，出现了未知错误")
 
-                elif not self._image_send:
-                    logger.debug("不发送图片")
+                    try:
+                        self._mode_log(level=level, mode_name=mode_name,
+                                       msg='开始导入变量到邮件模板中')
+                        msg_html = template_content.format(text=text, image=image, title=title, userid=userid,
+                                                           msg_type=msg_type)
+                    except KeyError:
+                        raise Exception("邮件模板文件中导入了不被支持的变量")
+                    except Exception:
+                        raise Exception("邮件模板文件在导入变量时遇到了未知错误")
 
-                # 构建邮件正文
-                html_part = MIMEText(msg_html, 'html', 'utf-8')
-                message_alternative.attach(html_part)
+                    if self._send_image:
+                        if image:
+                            try:
+                                try:
+                                    self._mode_log(level=level, mode_name=mode_name,
+                                                   msg='开始嵌入图片文件到邮件正文中')
+                                    with open(image, 'rb') as image_file:
+                                        message_image = MIMEImage(image_file.read())
 
-                logger.debug("邮件内容构建成功")
-                return message
+                                        message_image.add_header('Content-ID', '<image>')
+                                        message.attach(message_image)
+                                        self._mode_log(level=level, mode_name=mode_name,
+                                                       msg='图片文件嵌入成功')
 
-            except ImportError:
-                logger.debug("无法读取邮件模板文件")
-                raise
+                                except FileNotFoundError:
+                                    raise Exception("图片文件路径不存在")
+                                except PermissionError:
+                                    raise Exception("没有权限读取图片文件")
+                                except IsADirectoryError:
+                                    raise Exception("提供了一个目录地址，不是图片文件")
+                                except UnicodeDecodeError:
+                                    raise Exception("包含非 UTF-8 编码的内容，尝试用 UTF-8 编码读取图片文件失败")
+                                except TypeError:
+                                    raise Exception("接受到非二进制文件，无法将图片文件转码")
+                                except Exception:
+                                    raise Exception("图片文件出现未知错误，无法导入到邮件正文中")
+                            except Exception as e:
+                                self._mode_log(level=2, mode_name=mode_name,
+                                               msg=f'图片导入失败，跳过导入 - {e}')
+                        else:
+                            self._mode_log(level=2, mode_name=mode_name,
+                                           msg='未导入图片文件，跳过图片导入')
+                    elif not self._send_image:
+                        self._mode_log(level=level, mode_name=mode_name,
+                                       msg='未开启发送图片，抛弃图片数据')
 
-        except ImportError:
-            logger.debug(f"邮件创建失败")
-            raise
+                    html_part = MIMEText(msg_html, 'html', 'utf-8')
+                    message_alternative.attach(html_part)
 
-    @staticmethod
-    def _send_msg_to_smtp(server, message, sender_mail, receiver_list, log_type, test_type):
+                except Exception as e:
+                    raise Exception(f'内容构建失败 - {e}')
+
+            try:
+                self._mode_log(level=level, mode_name=mode_name,
+                               msg='开始构建邮件主题')
+                del message['Subject']
+                message['Subject'] = Header(title, "utf-8")
+
+            except HeaderParseError:
+                raise Exception('邮件主题包含无效的头部信息或无法解析的内容')
+            except UnicodeEncodeError:
+                raise Exception('邮件主题包含无法编码为 UTF-8 的字符')
+            except TypeError:
+                raise Exception('接受到非字符串类型的邮件主题')
+            except Exception:
+                raise Exception('邮件主题写入构建失败，出现了未知错误')
+
+            try:
+                self._mode_log(level=level, mode_name=mode_name,
+                               msg='开始构建邮件发件人用户名')
+                del message['From']
+                message['From'] = f'{sender_name} <{sender_mail}>'
+
+            except HeaderParseError:
+                raise Exception('发件人用户名包含无效的头部信息或无法解析的内容')
+            except UnicodeEncodeError:
+                raise Exception('发件人用户名包含无法编码为 UTF-8 的字符')
+            except TypeError:
+                raise Exception('接受到非字符串类型的发件人用户名')
+            except Exception:
+                raise Exception('发件人用户名写入失败，出现了未知错误')
+
+            level = 0
+            msg = "邮件消息主体构建成功"
+            return message
+
+        except Exception as e:
+            level = -1
+            msg = f'邮件消息主体构建失败 - 原因 - {e}'
+            raise Exception(mode_name)
+
+        finally:
+            self._mode_log(level=level, mode_name=mode_name, msg=msg)
+
+    def _send_msg_to_smtp(self, server, message, sender_mail, receiver_list, server_type):
         """
         发送邮件到指定 SMTP 服务器
         """
-        logger.debug("开始发送邮件")
+        mode_name = "邮件发送"
+        level = 1
+        msg = "没有日志信息"
+        self._mode_log(level=level, mode_name=mode_name, msg='开始运行')
+        test_type = "测试" if self._test else ""
         try:
-            server.sendmail(sender_mail, receiver_list, message.as_string())
-            logger.debug(f"使用{log_type}SMTP服务器，发送{test_type}邮件成功")
-            server.quit()
-            return True
-        except ImportError:
-            logger.debug(f"使用{log_type}SMTP服务器发送{test_type}邮件失败")
-            server.quit()
-            return False
+            try:
+                self._mode_log(level=level, mode_name=mode_name,
+                               msg=f"开始使用{server_type} SMTP 服务器发送{test_type}邮件")
+                server.sendmail(sender_mail, receiver_list, message.as_string())
 
-    def stop_service(self):
+            except socket.timeout:
+                raise Exception(f"连接超时")
+            except (smtplib.SMTPRecipientsRefused, smtplib.SMTPSenderRefused):
+                raise Exception("拒绝了接受或发送者地址")
+            except smtplib.SMTPDataError:
+                raise Exception("拒绝了接受邮件数据，返回了错误响应")
+            except (smtplib.SMTPServerDisconnected, ConnectionError):
+                raise Exception("断开了连接")
+            except smtplib.SMTPAuthenticationError:
+                raise Exception("身份验证失败")
+            except smtplib.SMTPNotSupportedError:
+                raise Exception("不支持某些功能")
+            except smtplib.SMTPException:
+                raise Exception(f"出现了未知原因")
+
+            level = 0
+            msg = f"使用{server_type} SMTP 服务器发送{test_type}邮件成功"
+            return True
+
+        except Exception as e:
+            level = -1
+            msg = f"使用{server_type} SMTP 服务器发送{test_type}邮件失败 - 原因 - {e}"
+            raise Exception(mode_name)
+
+        finally:
+            server.quit()
+            self._mode_log(level=level, mode_name=mode_name, msg=msg)
+
+    def _generate_result_log(self, m_success, s_success):
         """
-        退出插件
+        生成结果日志
         """
-        pass
+        mode_name = "结果汇报"
+        level = 1
+        msg = "没有日志信息"
+        self._mode_log(level=0, mode_name=mode_name, msg='开始运行')
+        test_type = "测试" if self._test else ""
+        try:
+            if m_success is True:
+                if s_success is True:
+                    if self._test:
+                        msg = f"所有服务器发送{test_type}邮件成功！"
+                elif s_success is False:
+                    if self._test is True:
+                        msg = f"主服务器发送{test_type}邮件成功！备用服务器发送{test_type}邮件失败！"
+                elif s_success is None:
+                    if self._test is True:
+                        msg = f"主服务器发送{test_type}邮件成功！未启动备用服务器！"
+                    else:
+                        msg = f"主服务器发送{test_type}邮件成功！"
+            elif m_success is False:
+                if s_success is True:
+                    msg = f"备用服务器发送{test_type}邮件成功！主服务器发送{test_type}邮件失败！"
+                elif s_success is False:
+                    msg = f"所有服务器发送{test_type}邮件失败！"
+                elif s_success is None:
+                    msg = f"主服务器发送{test_type}邮件失败！备用服务器未启动！无法发送{test_type}邮件！"
+            else:
+                raise Exception("出现未知错误，无法打印运行结果")
+
+            if self._test:
+                return msg
+            level = 0
+
+        except Exception as e:
+            msg = f"结果汇报失败 - 原因 - {e}"
+            level = -1
+            raise Exception(mode_name)
+
+        finally:
+            self._mode_log(level=level, mode_name=mode_name, msg=msg)
+
+    def _mode_log(self, mode_name, msg, level=1):
+        """
+        模块化日志汇报
+        """
+        if self._log_more:
+            if level == 0:
+                logger.info(f"成功 - {mode_name}模块 - {msg}")
+            elif level == 1:
+                logger.info(f"汇报 - {mode_name}模块 - {msg}")
+            elif level == 2:
+                logger.warning(f"警告 - {mode_name}模块 - {msg}")
+            elif level == -1:
+                logger.error(f"错误 - {mode_name}模块 - {msg}")
+
+        else:
+            if level == 0:
+                logger.info(f"成功 - {mode_name}模块 - {msg}")
+            elif level == 2:
+                logger.warning(f"警告 - {mode_name}模块 - {msg}")
+            elif level == -1:
+                logger.error(f"错误 - {mode_name}模块 - {msg}")
+
+    def __update_config(self):
+        """
+        配置更新
+        """
+        config = {
+            'enabled': self._enabled,
+            'enabled_image_send': self._send_image,
+            'secondary': self._secondary,
+            'test': self._test,
+            'log_more': self._log_more,
+            'enabled_customizable_mail_template': self._enabled_customizable_mail_template,
+            'enabled_msg_rules': self._enabled_msg_rules,
+            'enabled_customizable_msg_rules': self._enabled_customizable_msg_rules,
+            'content': self.custom_template.read_text(encoding="utf-8"),
+            'msgtypes': self._msgtypes,
+            'main_smtp_host': self._main_smtp_host,
+            'main_smtp_port': self._main_smtp_port,
+            'main_smtp_encryption': self._main_smtp_encryption,
+            'main_sender_mail': self._main_sender_mail,
+            'main_sender_password': self._main_sender_password,
+            'secondary_smtp_host': self._secondary_smtp_host,
+            'secondary_smtp_port': self._secondary_smtp_port,
+            'secondary_smtp_encryption': self._secondary_smtp_encryption,
+            'secondary_sender_mail': self._secondary_sender_mail,
+            'secondary_sender_password': self._secondary_sender_password,
+            'sender_name': self._sender_name,
+            'receiver_mail': self._receiver_mail
+        }
+        self.update_config(config)
