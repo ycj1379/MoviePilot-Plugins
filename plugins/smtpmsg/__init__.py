@@ -231,11 +231,6 @@ class SmtpMsg(_PluginBase):
         pass
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
-        EncryptionTypeOptions = [{'title': '不加密', 'value': 'not_encrypted'},
-                                 {'title': 'SSL', 'value': 'ssl'},
-                                 {'title': 'TLS', 'value': 'tls'},
-                                 ],
-
         MsgTypeOptions = []
         for item in NotificationType:
             MsgTypeOptions.append({
@@ -510,7 +505,11 @@ class SmtpMsg(_PluginBase):
                                                                 'props': {
                                                                     'model': 'main_smtp_encryption',
                                                                     'label': '加密方式',
-                                                                    'items': EncryptionTypeOptions,
+                                                                    'items': [
+                                                                        {'title': '不加密', 'value': 'not_encrypted'},
+                                                                        {'title': 'SSL', 'value': 'ssl'},
+                                                                        {'title': 'TLS', 'value': 'tls'},
+                                                                        ],
                                                                 }
                                                             }
                                                         ]
@@ -623,7 +622,10 @@ class SmtpMsg(_PluginBase):
                                                         'props': {
                                                             'model': 'secondary_smtp_encryption',
                                                             'label': '加密方式',
-                                                            'items': EncryptionTypeOptions,
+                                                            'items': [{'title': '不加密', 'value': 'not_encrypted'},
+                                                                      {'title': 'SSL', 'value': 'ssl'},
+                                                                      {'title': 'TLS', 'value': 'tls'},
+                                                                      ],
                                                         }
                                                     }
                                                 ]
@@ -926,287 +928,287 @@ class SmtpMsg(_PluginBase):
                                     },
                                 ]
                             },
-                    #         {
-                    #             'component': 'VWindowItem',
-                    #             'props': {
-                    #                 'value': 'msg_rules',
-                    #                 'style': {
-                    #                     'padding-top': '20px',
-                    #                     'padding-bottom': '20px'
-                    #                 },
-                    #             },
-                    #             'content': [
-                    #                 {
-                    #                     'component': 'VRow',
-                    #                     'props': {
-                    #                         'align': 'center'
-                    #                     },
-                    #                     'content': [
-                    #                         {
-                    #                             'component': 'VCol',
-                    #                             'props': {
-                    #                                 'cols': 12,
-                    #                                 'md': 3
-                    #                             },
-                    #                             'content': [
-                    #                                 {
-                    #                                     'component': 'VSwitch',
-                    #                                     'props': {
-                    #                                         'model': 'enabled_msg_rules',
-                    #                                         'label': '启用消息过滤',
-                    #                                     }
-                    #                                 }
-                    #                             ]
-                    #                         },
-                    #                         {
-                    #                             'component': 'VCol',
-                    #                             'props': {
-                    #                                 'cols': 12,
-                    #                                 'md': 3
-                    #                             },
-                    #                             'content': [
-                    #                                 {
-                    #                                     'component': 'VSwitch',
-                    #                                     'props': {
-                    #                                         'model': 'enabled_customizable_msg_rules',
-                    #                                         'label': '启用自定义过滤规则',
-                    #                                     }
-                    #                                 }
-                    #                             ]
-                    #                         },
-                    #                         {
-                    #                             "component": "VCol",
-                    #                             "props": {
-                    #                                 "cols": 12,
-                    #                                 "md": 4
-                    #                             },
-                    #                             "content": [
-                    #                                 {
-                    #                                     "component": "VSwitch",
-                    #                                     "props": {
-                    #                                         "model": "dialog_closed",
-                    #                                         "label": "打开自定义过滤规则设置窗口"
-                    #                                     }
-                    #                                 }
-                    #                             ]
-                    #                         },
-                    #                     ]
-                    #                 },
-                    #                 {
-                    #                     'component': 'VRow',
-                    #                     'content': [
-                    #                         {
-                    #                             'component': 'VCol',
-                    #                             'props': {
-                    #                                 'cols': 12,
-                    #                             },
-                    #                             'content': [
-                    #                                 {
-                    #                                     'component': 'VAlert',
-                    #                                     'props': {
-                    #                                         'type': 'info',
-                    #                                         'variant': 'tonal',
-                    #                                         'text': '该功能为结合已安装插件的插件名，对消息内容进行二次过滤；'
-                    #                                                 '不启用自定义过滤规则时，默认屏蔽整个插件的消息。'
-                    #                                     }
-                    #                                 }
-                    #                             ]
-                    #                         }
-                    #                     ]
-                    #                 },
-                    #                 {
-                    #                     'component': 'VRow',
-                    #                     'content': [
-                    #                         {
-                    #                             'component': 'VCol',
-                    #                             'props': {
-                    #                                 'cols': 12,
-                    #                             },
-                    #                             'content': [
-                    #                                 {
-                    #                                     'component': 'VAutocomplete',
-                    #                                     'props': {
-                    #                                         'multiple': True,
-                    #                                         'chips': True,
-                    #                                         'model': 'allow_plugins',
-                    #                                         'label': '需要管理的插件',
-                    #                                         'placeholder': '留空，则默认选择所有插件。',
-                    #                                         'items': PluginTypeOptions,
-                    #                                         "clearable": True,
-                    #                                     }
-                    #                                 }
-                    #                             ]
-                    #                         },
-                    #                     ]
-                    #                 },
-                    #                 {
-                    #                     'component': 'VRow',
-                    #                     'content': [
-                    #                         {
-                    #                             'component': 'VCol',
-                    #                             'props': {
-                    #                                 'cols': 12
-                    #
-                    #                             },
-                    #                             'content': [
-                    #                                 {
-                    #                                     'component': 'VAutocomplete',
-                    #                                     'props': {
-                    #                                         'multiple': True,
-                    #                                         'chips': True,
-                    #                                         'model': 'block_plugins',
-                    #                                         'label': '需要排除的插件',
-                    #                                         'placeholder': '留空，则默认不过滤任何插件。',
-                    #                                         'items': PluginTypeOptions,
-                    #                                         'clearable': True,
-                    #                                     }
-                    #                                 }
-                    #                             ]
-                    #                         },
-                    #                     ]
-                    #                 },
-                    #                 {
-                    #                     'component': 'VRow',
-                    #                     'content': [
-                    #                         {
-                    #                             'component': 'VCol',
-                    #                             'props': {
-                    #                                 'cols': 12,
-                    #                             },
-                    #                             'content': [
-                    #                                 {
-                    #                                     'component': 'VAlert',
-                    #                                     'props': {
-                    #                                         'type': 'warning',
-                    #                                         'variant': 'tonal',
-                    #                                         'text': '目前只支持插件名与邮件主题名一致的插件；'
-                    #                                                 '邮件主题 =【插件名】、{title} = '
-                    #                                                 '【{local_plugin.plugin_name}】。'
-                    #                                     }
-                    #                                 }
-                    #                             ]
-                    #                         }
-                    #                     ]
-                    #                 },
-                    #             ]
-                    #         },
-                    #     ]
-                    # },
-                    # {
-                    #     "component": "VDialog",
-                    #     "props": {
-                    #         "model": "dialog_closed",
-                    #         "max-width": "65rem",
-                    #         "overlay-class": "v-dialog--scrollable v-overlay--scroll-blocked",
-                    #         "content-class": "v-card v-card--density-default v-card--variant-elevated rounded-t"
-                    #     },
-                    #     "content": [
-                    #         {
-                    #             "component": "VCard",
-                    #             "props": {
-                    #                 "title": "设置自定义过滤规则"
-                    #             },
-                    #             "content": [
-                    #                 {
-                    #                     "component": "VDialogCloseBtn",
-                    #                     "props": {
-                    #                         "model": "dialog_closed"
-                    #                     }
-                    #                 },
-                    #                 {
-                    #                     "component": "VCardText",
-                    #                     "props": {},
-                    #                     "content": [
-                    #                         {
-                    #                             'component': 'VRow',
-                    #                             'content': [
-                    #                                 {
-                    #                                     'component': 'VCol',
-                    #                                     'props': {
-                    #                                         'cols': 12,
-                    #                                     },
-                    #                                     'content': [
-                    #                                         {
-                    #                                             'component': 'VAceEditor',
-                    #                                             'props': {
-                    #                                                 'modelvalue': 'site_config',
-                    #                                                 'lang': 'json',
-                    #                                                 'theme': 'monokai',
-                    #                                                 'style': 'height: 30rem',
-                    #                                             }
-                    #                                         }
-                    #                                     ]
-                    #                                 }
-                    #                             ]
-                    #                         },
-                    #                         {
-                    #                             'component': 'VRow',
-                    #                             'content': [
-                    #                                 {
-                    #                                     'component': 'VCol',
-                    #                                     'props': {
-                    #                                         'cols': 12,
-                    #                                     },
-                    #                                     'content': [
-                    #                                         {
-                    #                                             'component': 'VAlert',
-                    #                                             'props': {
-                    #                                                 'type': 'info',
-                    #                                                 'variant': 'tonal'
-                    #                                             },
-                    #                                             'content': [
-                    #                                                 {
-                    #                                                     'component': 'span',
-                    #                                                     'text': '注意：只有启用高级自定义过滤时，该配置项才会生效，详细配置参考：'
-                    #                                                 },
-                    #                                                 {
-                    #                                                     'component': 'a',
-                    #                                                     'props': {
-                    #                                                         'href': 'https://github.com/Aqr-K'
-                    #                                                                 '/MoviePilot-Plugins/blob'
-                    #                                                                 '/main/plugins/smtpmsg',
-                    #                                                         'target': '_blank'
-                    #                                                     },
-                    #                                                     'content': [
-                    #                                                         {
-                    #                                                             'component': 'u',
-                    #                                                             'text': 'README'
-                    #                                                         }
-                    #                                                     ]
-                    #                                                 }
-                    #                                             ]
-                    #                                         },
-                    #                                     ]
-                    #                                 }
-                    #                             ]
-                    #                         },
-                    #                         {
-                    #                             'component': 'VRow',
-                    #                             'content': [
-                    #                                 {
-                    #                                     'component': 'VCol',
-                    #                                     'props': {
-                    #                                         'cols': 12,
-                    #                                     },
-                    #                                     'content': [
-                    #                                         {
-                    #                                             'component': 'VAlert',
-                    #                                             'props': {
-                    #                                                 'type': 'info',
-                    #                                                 'variant': 'tonal',
-                    #                                                 'text': '注意：当"需要管理的插件"中的插件，'
-                    #                                                         '在自定义过滤规则未配置内容时，'
-                    #                                                         '默认过滤整个插件的消息。'
-                    #                                             }
-                    #                                         }
-                    #                                     ]
-                    #                                 }
-                    #                             ]
-                    #                         },
-                    #                     ]
-                    #                 }
-                    #             ]
-                    #         }
+                            #         {
+                            #             'component': 'VWindowItem',
+                            #             'props': {
+                            #                 'value': 'msg_rules',
+                            #                 'style': {
+                            #                     'padding-top': '20px',
+                            #                     'padding-bottom': '20px'
+                            #                 },
+                            #             },
+                            #             'content': [
+                            #                 {
+                            #                     'component': 'VRow',
+                            #                     'props': {
+                            #                         'align': 'center'
+                            #                     },
+                            #                     'content': [
+                            #                         {
+                            #                             'component': 'VCol',
+                            #                             'props': {
+                            #                                 'cols': 12,
+                            #                                 'md': 3
+                            #                             },
+                            #                             'content': [
+                            #                                 {
+                            #                                     'component': 'VSwitch',
+                            #                                     'props': {
+                            #                                         'model': 'enabled_msg_rules',
+                            #                                         'label': '启用消息过滤',
+                            #                                     }
+                            #                                 }
+                            #                             ]
+                            #                         },
+                            #                         {
+                            #                             'component': 'VCol',
+                            #                             'props': {
+                            #                                 'cols': 12,
+                            #                                 'md': 3
+                            #                             },
+                            #                             'content': [
+                            #                                 {
+                            #                                     'component': 'VSwitch',
+                            #                                     'props': {
+                            #                                         'model': 'enabled_customizable_msg_rules',
+                            #                                         'label': '启用自定义过滤规则',
+                            #                                     }
+                            #                                 }
+                            #                             ]
+                            #                         },
+                            #                         {
+                            #                             "component": "VCol",
+                            #                             "props": {
+                            #                                 "cols": 12,
+                            #                                 "md": 4
+                            #                             },
+                            #                             "content": [
+                            #                                 {
+                            #                                     "component": "VSwitch",
+                            #                                     "props": {
+                            #                                         "model": "dialog_closed",
+                            #                                         "label": "打开自定义过滤规则设置窗口"
+                            #                                     }
+                            #                                 }
+                            #                             ]
+                            #                         },
+                            #                     ]
+                            #                 },
+                            #                 {
+                            #                     'component': 'VRow',
+                            #                     'content': [
+                            #                         {
+                            #                             'component': 'VCol',
+                            #                             'props': {
+                            #                                 'cols': 12,
+                            #                             },
+                            #                             'content': [
+                            #                                 {
+                            #                                     'component': 'VAlert',
+                            #                                     'props': {
+                            #                                         'type': 'info',
+                            #                                         'variant': 'tonal',
+                            #                                         'text': '该功能为结合已安装插件的插件名，对消息内容进行二次过滤；'
+                            #                                                 '不启用自定义过滤规则时，默认屏蔽整个插件的消息。'
+                            #                                     }
+                            #                                 }
+                            #                             ]
+                            #                         }
+                            #                     ]
+                            #                 },
+                            #                 {
+                            #                     'component': 'VRow',
+                            #                     'content': [
+                            #                         {
+                            #                             'component': 'VCol',
+                            #                             'props': {
+                            #                                 'cols': 12,
+                            #                             },
+                            #                             'content': [
+                            #                                 {
+                            #                                     'component': 'VAutocomplete',
+                            #                                     'props': {
+                            #                                         'multiple': True,
+                            #                                         'chips': True,
+                            #                                         'model': 'allow_plugins',
+                            #                                         'label': '需要管理的插件',
+                            #                                         'placeholder': '留空，则默认选择所有插件。',
+                            #                                         'items': PluginTypeOptions,
+                            #                                         "clearable": True,
+                            #                                     }
+                            #                                 }
+                            #                             ]
+                            #                         },
+                            #                     ]
+                            #                 },
+                            #                 {
+                            #                     'component': 'VRow',
+                            #                     'content': [
+                            #                         {
+                            #                             'component': 'VCol',
+                            #                             'props': {
+                            #                                 'cols': 12
+                            #
+                            #                             },
+                            #                             'content': [
+                            #                                 {
+                            #                                     'component': 'VAutocomplete',
+                            #                                     'props': {
+                            #                                         'multiple': True,
+                            #                                         'chips': True,
+                            #                                         'model': 'block_plugins',
+                            #                                         'label': '需要排除的插件',
+                            #                                         'placeholder': '留空，则默认不过滤任何插件。',
+                            #                                         'items': PluginTypeOptions,
+                            #                                         'clearable': True,
+                            #                                     }
+                            #                                 }
+                            #                             ]
+                            #                         },
+                            #                     ]
+                            #                 },
+                            #                 {
+                            #                     'component': 'VRow',
+                            #                     'content': [
+                            #                         {
+                            #                             'component': 'VCol',
+                            #                             'props': {
+                            #                                 'cols': 12,
+                            #                             },
+                            #                             'content': [
+                            #                                 {
+                            #                                     'component': 'VAlert',
+                            #                                     'props': {
+                            #                                         'type': 'warning',
+                            #                                         'variant': 'tonal',
+                            #                                         'text': '目前只支持插件名与邮件主题名一致的插件；'
+                            #                                                 '邮件主题 =【插件名】、{title} = '
+                            #                                                 '【{local_plugin.plugin_name}】。'
+                            #                                     }
+                            #                                 }
+                            #                             ]
+                            #                         }
+                            #                     ]
+                            #                 },
+                            #             ]
+                            #         },
+                            #     ]
+                            # },
+                            # {
+                            #     "component": "VDialog",
+                            #     "props": {
+                            #         "model": "dialog_closed",
+                            #         "max-width": "65rem",
+                            #         "overlay-class": "v-dialog--scrollable v-overlay--scroll-blocked",
+                            #         "content-class": "v-card v-card--density-default v-card--variant-elevated rounded-t"
+                            #     },
+                            #     "content": [
+                            #         {
+                            #             "component": "VCard",
+                            #             "props": {
+                            #                 "title": "设置自定义过滤规则"
+                            #             },
+                            #             "content": [
+                            #                 {
+                            #                     "component": "VDialogCloseBtn",
+                            #                     "props": {
+                            #                         "model": "dialog_closed"
+                            #                     }
+                            #                 },
+                            #                 {
+                            #                     "component": "VCardText",
+                            #                     "props": {},
+                            #                     "content": [
+                            #                         {
+                            #                             'component': 'VRow',
+                            #                             'content': [
+                            #                                 {
+                            #                                     'component': 'VCol',
+                            #                                     'props': {
+                            #                                         'cols': 12,
+                            #                                     },
+                            #                                     'content': [
+                            #                                         {
+                            #                                             'component': 'VAceEditor',
+                            #                                             'props': {
+                            #                                                 'modelvalue': 'site_config',
+                            #                                                 'lang': 'json',
+                            #                                                 'theme': 'monokai',
+                            #                                                 'style': 'height: 30rem',
+                            #                                             }
+                            #                                         }
+                            #                                     ]
+                            #                                 }
+                            #                             ]
+                            #                         },
+                            #                         {
+                            #                             'component': 'VRow',
+                            #                             'content': [
+                            #                                 {
+                            #                                     'component': 'VCol',
+                            #                                     'props': {
+                            #                                         'cols': 12,
+                            #                                     },
+                            #                                     'content': [
+                            #                                         {
+                            #                                             'component': 'VAlert',
+                            #                                             'props': {
+                            #                                                 'type': 'info',
+                            #                                                 'variant': 'tonal'
+                            #                                             },
+                            #                                             'content': [
+                            #                                                 {
+                            #                                                     'component': 'span',
+                            #                                                     'text': '注意：只有启用高级自定义过滤时，该配置项才会生效，详细配置参考：'
+                            #                                                 },
+                            #                                                 {
+                            #                                                     'component': 'a',
+                            #                                                     'props': {
+                            #                                                         'href': 'https://github.com/Aqr-K'
+                            #                                                                 '/MoviePilot-Plugins/blob'
+                            #                                                                 '/main/plugins/smtpmsg',
+                            #                                                         'target': '_blank'
+                            #                                                     },
+                            #                                                     'content': [
+                            #                                                         {
+                            #                                                             'component': 'u',
+                            #                                                             'text': 'README'
+                            #                                                         }
+                            #                                                     ]
+                            #                                                 }
+                            #                                             ]
+                            #                                         },
+                            #                                     ]
+                            #                                 }
+                            #                             ]
+                            #                         },
+                            #                         {
+                            #                             'component': 'VRow',
+                            #                             'content': [
+                            #                                 {
+                            #                                     'component': 'VCol',
+                            #                                     'props': {
+                            #                                         'cols': 12,
+                            #                                     },
+                            #                                     'content': [
+                            #                                         {
+                            #                                             'component': 'VAlert',
+                            #                                             'props': {
+                            #                                                 'type': 'info',
+                            #                                                 'variant': 'tonal',
+                            #                                                 'text': '注意：当"需要管理的插件"中的插件，'
+                            #                                                         '在自定义过滤规则未配置内容时，'
+                            #                                                         '默认过滤整个插件的消息。'
+                            #                                             }
+                            #                                         }
+                            #                                     ]
+                            #                                 }
+                            #                             ]
+                            #                         },
+                            #                     ]
+                            #                 }
+                            #             ]
+                            #         }
                         ]
                     }
                 ]
