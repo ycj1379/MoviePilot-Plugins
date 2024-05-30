@@ -336,7 +336,7 @@ class SendCustomMsg(_PluginBase):
                                             'model': 'image',
                                             'label': '图片地址',
                                             'clearable': True,
-                                            'placeholder': '目前只支持输入url类型的图片地址；上传指定图片需要等带项目开发者支持。',
+                                            'placeholder': '目前只支持输入url类型的图片地址；上传本地图片需要等待项目开发组支持。',
                                         }
                                     }
                                 ]
