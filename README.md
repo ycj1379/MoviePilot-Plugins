@@ -1,6 +1,6 @@
 # MoviePilot-Plugin-Market
 
-MoviePilot三方插件市场：https://github.com/Aqr-k/MoviePilot-Plugins/
+MoviePilot第三方插件市场：https://github.com/Aqr-k/MoviePilot-Plugins/
 
 # 保持插件最新
 
@@ -10,6 +10,8 @@ MoviePilot三方插件市场：https://github.com/Aqr-k/MoviePilot-Plugins/
 ### 插件新增
 
 - [SMTP邮件消息通知](docs/SmtpMsg.md)
+- [自定义消息汇报](docs/SendCustomMsg.md)
+- [OpenStrm](docs/OpenStrm.md)
 
 ### 特别鸣谢
 - [thsrite](https://github.com/thsrite)
