@@ -42,10 +42,10 @@ class SmtpMsgDecorator:
                 logs = {'msg': "没有日志", 'level': 1}
                 try:
                     if log_more:
-                        logger.info(f"状态 - {mode_name}模块 - 开始运行")
+                        logger.info(f"日志汇报 - 状态 - {mode_name}模块 - 开始运行")
                     result = func(*args, log_container=logs, **kwargs)
                 except Exception as e:
-                    logs['msg'] = f"模块运行失败 - 原因 - {e}"
+                    logs['msg'] = f"{mode_name}模块 运行失败 - 原因 - {e}"
                     logs['level'] = -1
                     raise Exception(logs['msg'])
                 finally:
@@ -64,15 +64,19 @@ class SmtpMsgDecorator:
                     else:
                         status = "未知"
                     if status:
-                        logger.info(f"{status} - {mode_name}模块 - {msg}")
+                        if status == "错误":
+                            logger.error(f"日志汇报 - {status} - {msg}")
+                        elif status == "警告" or status == "未知":
+                            logger.warning(f"日志汇报 - {status} - {msg}")
+                        else:
+                            logger.info(f"日志汇报 - {status} - {msg}")
+
                     if (level == 0, 1, 2) and status != ("错误", "未知"):
-                        msg = "模块运行成功"
+                        msg = f"{mode_name}模块 - 运行完成"
                         status = "状态"
-                        logger.info(f"{status} - {mode_name}模块 - {msg}")
+                        logger.info(f"日志汇报 - {status} - {msg}")
                 return result
-
             return log_wrapper
-
         return log_decorator
 
 
@@ -84,7 +88,7 @@ class SmtpMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "2.3"
+    plugin_version = "2.4"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -113,7 +117,7 @@ class SmtpMsg(_PluginBase):
     default_template: Path = settings.CONFIG_PATH / ".." / "app" / "plugins" / "smtpmsg" / "template" / "default.html"
     custom_template_dir: Path = settings.PLUGIN_DATA_PATH / "smtpmsg" / "template"
     custom_template: Path = custom_template_dir / "custom.html"
-    _test_image: Path = "/public/plugin_icon/Synomail_A.png"
+    _test_image: Path = settings.CONFIG_PATH / ".." / "app" / "plugins" / "smtpmsg" / "Synomail_A.png"
 
     _main_smtp_host: str = None
     _main_smtp_port: int = None
@@ -137,7 +141,7 @@ class SmtpMsg(_PluginBase):
         """
         初始化插件
         """
-        logger.info(f"汇报 - 初始化插件 - {self.plugin_name}")
+        logger.info(f"日志汇报 - 初始化插件 - {self.plugin_name}")
         # 读取配置
         if config:
             self._enabled = config.get("enabled", False)
@@ -209,7 +213,7 @@ class SmtpMsg(_PluginBase):
         """
         self.__check_template_file()
 
-    @SmtpMsgDecorator.log("模板文件检查")
+    @SmtpMsgDecorator.log("文件检查")
     def __check_template_file(self, log_container):
         msg = level = None
         try:
@@ -274,7 +278,7 @@ class SmtpMsg(_PluginBase):
                     return msg
             else:
                 level = 1
-                msg = "未启用写入自定义模板与回复默认模板，跳过"
+                msg = "写入自定义模板与恢复默认模板功能未启用"
         except Exception as e:
             level = -1
             msg = f"模板配置运行失败 - 原因 - {e}"
@@ -1683,8 +1687,8 @@ class SmtpMsg(_PluginBase):
                 msg = f"提取{server_type} SMTP 服务端配置成功"
                 level = 1
 
-            except KeyError:
-                raise Exception(f'{server_type} SMTP 服务端配置参数不完整')
+            except KeyError as e:
+                raise Exception(f'{server_type} SMTP 服务端配置参数不完整 - {e}')
             except Exception as e:
                 raise Exception(f'出现异常 - 原因 - {e}')
         except Exception as e:
@@ -1773,22 +1777,22 @@ class SmtpMsg(_PluginBase):
                 msg = "地址连接成功"
                 level = 1
                 return server
-            except socket.timeout:
-                raise Exception('建立连接超时')
-            except socket.gaierror:
-                raise Exception('无法解析主机名或 IP 地址')
-            except smtplib.SMTPConnectError:
-                raise Exception('无法建立连接')
-            except smtplib.SMTPAuthenticationError:
-                raise Exception('登录失败，用户名或密码错误')
+            except socket.timeout as e:
+                raise Exception(f'建立连接超时 - {e}')
+            except socket.gaierror as e:
+                raise Exception(f'无法解析主机名或 IP 地址 - {e}')
+            except smtplib.SMTPConnectError as e:
+                raise Exception(f'无法建立连接 - {e}')
+            except smtplib.SMTPAuthenticationError as e:
+                raise Exception(f'登录失败，用户名或密码错误 - {e}')
             except smtplib.SMTPResponseException as e:
                 raise Exception(f'返回异常状态码: {e.smtp_code}')
-            except smtplib.SMTPServerDisconnected:
-                raise Exception('连接已断开')
-            except smtplib.SMTPNotSupportedError:
-                raise Exception('不支持所需的身份验证方法')
-            except (smtplib.SMTPException, Exception):
-                raise Exception('登录或者连接时出现未知异常')
+            except smtplib.SMTPServerDisconnected as e:
+                raise Exception(f'连接已断开 - {e}')
+            except smtplib.SMTPNotSupportedError as e:
+                raise Exception(f'不支持所需的身份验证方法 - {e}')
+            except (smtplib.SMTPException, Exception) as e:
+                raise Exception(f'登录或者连接时出现未知异常 - {e}')
         except Exception as e:
             level = -1
             raise Exception(e)
@@ -1821,21 +1825,21 @@ class SmtpMsg(_PluginBase):
                     template = self.default_template
                 with open(template, "r", encoding="utf-8") as template_file:
                     template_content = template_file.read()
-            except FileNotFoundError:
-                raise Exception("没有找到邮件模板文件")
-            except PermissionError:
-                raise Exception("无法读取邮件模板文件")
-            except IsADirectoryError:
-                raise Exception("提供了一个目录地址，不是模板文件")
-            except UnicodeDecodeError:
-                raise Exception("包含非 UTF-8 编码的内容，尝试用 UTF-8 编码读取邮件模板失败")
+            except FileNotFoundError as e:
+                raise Exception(f"没有找到邮件模板文件 - {e}")
+            except PermissionError as e:
+                raise Exception(f"无法读取邮件模板文件 - {e}")
+            except IsADirectoryError as e:
+                raise Exception(f"提供了一个目录地址，不是模板文件 - {e}")
+            except UnicodeDecodeError as e:
+                raise Exception(f"包含非 UTF-8 编码的内容，尝试用 UTF-8 编码读取邮件模板失败 - {e}")
             except Exception as e:
                 raise Exception(f"邮件模板文件读取失败，出现了未知错误 - {e}")
             try:
                 msg_html = template_content.format(text=text, image=image, title=title, userid=userid,
                                                    msg_type=msg_type)
-            except KeyError:
-                raise Exception("邮件模板文件中导入了不被支持的变量")
+            except KeyError as e:
+                raise Exception(f"邮件模板文件中导入了不被支持的变量 - {e}")
             except Exception as e:
                 raise Exception(f"邮件模板文件在导入变量时遇到了未知错误 - {e}")
             msg = f"成功提取邮件模板并导入变量"
@@ -1856,25 +1860,25 @@ class SmtpMsg(_PluginBase):
             try:
                 del message['Subject']
                 message['Subject'] = Header(title, "utf-8")
-            except HeaderParseError:
-                raise Exception('邮件主题包含无效的头部信息或无法解析的内容')
-            except UnicodeEncodeError:
-                raise Exception('邮件主题包含无法编码为 UTF-8 的字符')
-            except TypeError:
-                raise Exception('接受到非字符串类型的邮件主题')
-            except Exception:
-                raise Exception('邮件主题写入构建失败，出现了未知错误')
+            except HeaderParseError as e:
+                raise Exception(f'邮件主题包含无效的头部信息或无法解析的内容 - {e}')
+            except UnicodeEncodeError as e:
+                raise Exception(f'邮件主题包含无法编码为 UTF-8 的字符 - {e}')
+            except TypeError as e:
+                raise Exception(f'接受到非字符串类型的邮件主题 - {e}')
+            except Exception as e:
+                raise Exception(f'邮件主题构建失败，出现了未知错误 - {e}')
             try:
                 del message['From']
                 message['From'] = f'{sender_name} <{sender_mail}>'
-            except HeaderParseError:
-                raise Exception('发件人用户名包含无效的头部信息或无法解析的内容')
-            except UnicodeEncodeError:
-                raise Exception('发件人用户名包含无法编码为 UTF-8 的字符')
-            except TypeError:
-                raise Exception('接受到非字符串类型的发件人用户名')
-            except Exception:
-                raise Exception('发件人用户名写入失败，出现了未知错误')
+            except HeaderParseError as e:
+                raise Exception(f'发件人用户名包含无效的头部信息或无法解析的内容 - {e}')
+            except UnicodeEncodeError as e:
+                raise Exception(f'发件人用户名包含无法编码为 UTF-8 的字符 - {e}')
+            except TypeError as e:
+                raise Exception(f'接受到非字符串类型的发件人用户名 - {e}')
+            except Exception as e:
+                raise Exception(f'发件人用户名写入失败，出现了未知错误 - {e}')
             level = 0
             msg = '邮件头构建成功'
             return message
@@ -1891,7 +1895,10 @@ class SmtpMsg(_PluginBase):
         try:
             message_alternative = MIMEMultipart('alternative')
             message.attach(message_alternative)
-            message = self.___msg_build_email_body_embed_image(image, message)
+
+            image_mime = self.___msg_build_email_body_embed_image(image)
+            if image_mime:
+                message.attach(image_mime)
             html_part = MIMEText(msg_html, 'html', 'utf-8')
             message_alternative.attach(html_part)
             level = 1
@@ -1906,14 +1913,26 @@ class SmtpMsg(_PluginBase):
             log_container['level'] = level
 
     @SmtpMsgDecorator.log("图片嵌入")
-    def ___msg_build_email_body_embed_image(self, image, message, log_container):
-        msg = level = image_data = None
+    def ___msg_build_email_body_embed_image(self, image, log_container):
+        msg = level = image_mime = None
         if self._send_image:
             if image:
                 try:
                     try:
                         base64_regex = re.compile(r'^data:image/([a-zA-Z]*);base64,(\S*)$', re.IGNORECASE)
-                        if isinstance(image, str):
+                        if os.path.isfile(image):
+                            try:
+                                with open(image, 'rb') as image_file:
+                                    image_data = image_file.read()
+                            except FileNotFoundError as e:
+                                raise Exception(f"文件路径不存在 - {e}")
+                            except PermissionError as e:
+                                raise Exception(f"没有权限读取图片文件 - {e}")
+                            except IsADirectoryError as e:
+                                raise Exception(f"提供了一个目录地址，不是图片文件 - {e}")
+                            except Exception as e:
+                                raise Exception(f"读取图片文件时出错：{e}")
+                        else:
                             parsed_url = urllib.parse.urlparse(image)
                             if parsed_url.scheme in set(urllib.parse.uses_netloc):
                                 try:
@@ -1924,48 +1943,39 @@ class SmtpMsg(_PluginBase):
                                         raise Exception(f"获取图片失败。状态码：{response.status_code}")
                                 except Exception as e:
                                     raise Exception(f"发生错误 - {e}")
-                            elif os.path.isfile(image):
-                                try:
-                                    with open(image, 'rb') as image_file:
-                                        image_data = MIMEImage(image_file.read())
-                                except FileNotFoundError:
-                                    raise Exception("文件路径不存在")
-                                except PermissionError:
-                                    raise Exception("没有权限读取图片文件")
-                                except IsADirectoryError:
-                                    raise Exception("提供了一个目录地址，不是图片文件")
-                                except Exception as e:
-                                    raise Exception(f"读取图片文件时出错：{e}")
                             elif base64_regex.match(image):
                                 try:
                                     base64_data = base64_regex.match(image).group('base64_data')
                                     image_data = base64.b64decode(base64_data)
                                 except Exception as e:
-                                    raise Exception(f"解码 Base64 数据时出错：{e}")
+                                    raise Exception(f"解码 Base64 数据时出错 - {e}")
                             elif isinstance(image, bytes):
                                 image_data = image
                             else:
-                                raise Exception("无法识别的输入。请提供有效的 URL、本地文件路径或 Base64 编码的数据。")
-                        image_data.add_header('Content-ID', '<image>')
-                        message.attach(image_data)
-                        level = 1
-                        msg = '图片文件嵌入成功'
-                    except TypeError:
-                        raise Exception("接受到非二进制文件，无法将图片文件转码")
+                                raise Exception("无法识别的输入。请提供有效的数据； URL、本地文件路径、Base64、二进制编码的数据")
+                        if image_data:
+                            image_mime = MIMEImage(image_data)
+                            image_mime.add_header('Content-ID', '<image>')
+                            level = 1
+                            msg = '图片文件嵌入成功'
+                        else:
+                            raise Exception("无法获取图像数据")
+                    except TypeError as e:
+                        raise Exception(f"接受不支持的数据，无法识别图片文件 - {e}")
                     except Exception as e:
                         raise Exception(e)
                 except Exception as e:
                     level = 2
                     msg = f'出现错误，跳过嵌入 - 原因 - {e}'
             else:
-                level = 1
+                level = 2
                 msg = '未传入图片参数，跳过图片嵌入'
         elif not self._send_image:
             level = 1
             msg = '未开启发送图片，抛弃图片数据'
         log_container['msg'] = msg
         log_container['level'] = level
-        return message
+        return image_mime
 
     @SmtpMsgDecorator.log("邮件发送")
     def _send_msg_to_smtp(self, server, message, sender_mail, receiver_list, server_type, log_container):
@@ -1974,20 +1984,20 @@ class SmtpMsg(_PluginBase):
         try:
             try:
                 server.sendmail(sender_mail, receiver_list, message.as_string())
-            except socket.timeout:
-                raise Exception(f"连接超时")
-            except (smtplib.SMTPRecipientsRefused, smtplib.SMTPSenderRefused):
-                raise Exception("拒绝了接受或发送者地址")
-            except smtplib.SMTPDataError:
-                raise Exception("拒绝了接受邮件数据，返回了错误响应")
+            except socket.timeout as e:
+                raise Exception(f"连接超时 - {e}")
+            except (smtplib.SMTPRecipientsRefused, smtplib.SMTPSenderRefused) as e:
+                raise Exception(f"拒绝了接受或发送者地址 - {e}")
+            except smtplib.SMTPDataError as e:
+                raise Exception(f"拒绝了接受邮件数据，返回了错误响应 - {e}")
             except (smtplib.SMTPServerDisconnected, ConnectionError):
-                raise Exception("断开了连接")
-            except smtplib.SMTPAuthenticationError:
-                raise Exception("身份验证失败")
-            except smtplib.SMTPNotSupportedError:
-                raise Exception("不支持某些功能")
-            except smtplib.SMTPException:
-                raise Exception(f"出现了未知原因")
+                raise Exception(f"断开了连接 - {e}")
+            except smtplib.SMTPAuthenticationError as e:
+                raise Exception(f"身份验证失败 - {e}")
+            except smtplib.SMTPNotSupportedError as e:
+                raise Exception(f"不支持某些功能 - {e}")
+            except smtplib.SMTPException as e:
+                raise Exception(f"出现了未知原因 - {e}")
             msg = f"使用{server_type} SMTP 服务器发送{test_type}邮件成功"
             level = 1
             return True
