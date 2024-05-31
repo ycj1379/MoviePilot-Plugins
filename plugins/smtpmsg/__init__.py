@@ -1990,7 +1990,7 @@ class SmtpMsg(_PluginBase):
                 raise Exception(f"拒绝了接受或发送者地址 - {e}")
             except smtplib.SMTPDataError as e:
                 raise Exception(f"拒绝了接受邮件数据，返回了错误响应 - {e}")
-            except (smtplib.SMTPServerDisconnected, ConnectionError):
+            except (smtplib.SMTPServerDisconnected, ConnectionError) as e:
                 raise Exception(f"断开了连接 - {e}")
             except smtplib.SMTPAuthenticationError as e:
                 raise Exception(f"身份验证失败 - {e}")
