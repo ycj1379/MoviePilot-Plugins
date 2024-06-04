@@ -1,6 +1,4 @@
-import base64
 import os
-import re
 import shutil
 import socket
 import requests
@@ -76,7 +74,9 @@ class SmtpMsgDecorator:
                         status = "状态"
                         logger.info(f"日志汇报 - {status} - {msg}")
                 return result
+
             return log_wrapper
+
         return log_decorator
 
 
@@ -113,6 +113,7 @@ class SmtpMsg(_PluginBase):
     _reset: bool = False
     _enabled_msg_rules: bool = False
     _enabled_customizable_msg_rules: bool = False
+    _enabled_proxy_image: bool = True
 
     default_template: Path = settings.CONFIG_PATH / ".." / "app" / "plugins" / "smtpmsg" / "template" / "default.html"
     custom_template_dir: Path = settings.PLUGIN_DATA_PATH / "smtpmsg" / "template"
@@ -156,6 +157,7 @@ class SmtpMsg(_PluginBase):
             self._reset = config.get("reset", False)
             self._enabled_msg_rules = config.get("enabled_msg_rules", False)
             self._enabled_customizable_msg_rules = config.get("enabled_customizable_msg_rules", False)
+            self._enabled_proxy_image = config.get("enabled_proxy_image", True)
             self._main_smtp_host = config.get("main_smtp_host", )
             self._main_smtp_port = config.get("main_smtp_port", )
             self._main_smtp_encryption = config.get("main_smtp_encryption", "not_encrypted")
@@ -292,19 +294,16 @@ class SmtpMsg(_PluginBase):
         """
         启用插件
         """
-        if self._enabled:
-            # 参数配置不完整，关闭插件
-            if self._main is False and self._secondary is False:
-                # 关闭插件
-                self._enabled = False
-                self._test = False
-                self.__update_config()
-                msg = "当前参数配置不完整，主服务器与备用服务器至少需要启用一个，关闭插件"
-                logger.warning(msg)
-                self.systemmessage.put(f"{self.plugin_name}插件{msg}")
-                return
-
-            # 测试邮件
+        # 参数配置不完整，关闭插件
+        if self._main is False and self._secondary is False:
+            self._enabled = False
+            self._test = False
+            self.__update_config()
+            msg = "当前参数配置不完整，主服务器与备用服务器至少需要启用一个，关闭插件"
+            logger.warning(msg)
+            self.systemmessage.put(f"{self.plugin_name}插件{msg}")
+            return
+        else:
             if self._test:
                 msg = self.master_program()
                 self._test = False
@@ -362,6 +361,8 @@ class SmtpMsg(_PluginBase):
                                         'props': {
                                             'model': 'enabled',
                                             'label': '启用插件',
+                                            'hint': '开启后插件将处于激活状态',
+                                            'persistent-hint': True,
                                         }
                                     }
                                 ]
@@ -370,23 +371,7 @@ class SmtpMsg(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 3
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VSwitch',
-                                        'props': {
-                                            'model': 'enabled_image_send',
-                                            'label': '发送图片',
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 3
+                                    'md': 6
                                 },
                                 'content': [
                                     {
@@ -394,6 +379,8 @@ class SmtpMsg(_PluginBase):
                                         'props': {
                                             'model': 'test',
                                             'label': '发送测试邮件',
+                                            'hint': '发送测试邮件，检查配置是否正确',
+                                            'persistent-hint': True,
                                         }
                                     }
                                 ]
@@ -410,6 +397,8 @@ class SmtpMsg(_PluginBase):
                                         'props': {
                                             'model': 'log_more',
                                             'label': '记录更多日志',
+                                            'hint': '细分日志细节，方便排查问题',
+                                            'persistent-hint': True,
                                         }
                                     }
                                 ]
@@ -528,6 +517,8 @@ class SmtpMsg(_PluginBase):
                                                                 'props': {
                                                                     'model': 'main',
                                                                     'label': '启用主服务器',
+                                                                    'hint': '允许使用主服务器发送消息',
+                                                                    'persistent-hint': True,
                                                                 }
                                                             }
                                                         ]
@@ -544,7 +535,7 @@ class SmtpMsg(_PluginBase):
                                                                 'props': {
                                                                     'type': 'info',
                                                                     'variant': 'tonal',
-                                                                    'text': '主服务器发送成功时，不使用备用服务器发送消息。（两个服务器至少启用一个）'
+                                                                    'text': '主服务器发送成功时，不使用备用服务器发送消息（两个服务器至少启用一个）'
                                                                 }
                                                             }
                                                         ]
@@ -570,7 +561,9 @@ class SmtpMsg(_PluginBase):
                                                                     'model': 'main_smtp_host',
                                                                     'label': 'SMTP服务器地址',
                                                                     'placeholder': 'smtp.example.com',
-                                                                    'clearable': True
+                                                                    'clearable': True,
+                                                                    'hint': '服务器的地址，不需要加任何协议头',
+                                                                    'persistent-hint': True,
                                                                 }
                                                             }
                                                         ]
@@ -588,7 +581,10 @@ class SmtpMsg(_PluginBase):
                                                                     'model': 'main_smtp_port',
                                                                     'label': 'SMTP服务器端口',
                                                                     'placeholder': '常见：25、465、587、995……',
-                                                                    'clearable': True
+                                                                    'clearable': True,
+                                                                    'hint': '服务器地址的端口号：1~65535',
+                                                                    'persistent-hint': True,
+                                                                    'maxlength': 5,
                                                                 }
                                                             }
                                                         ]
@@ -610,6 +606,8 @@ class SmtpMsg(_PluginBase):
                                                                         {'title': 'SSL', 'value': 'ssl'},
                                                                         {'title': 'TLS', 'value': 'tls'},
                                                                     ],
+                                                                    'hint': '服务器的加密方式',
+                                                                    'persistent-hint': True,
                                                                 }
                                                             }
                                                         ]
@@ -635,7 +633,9 @@ class SmtpMsg(_PluginBase):
                                                                     'model': 'main_sender_mail',
                                                                     'label': 'SMTP邮箱账号',
                                                                     'placeholder': 'example@example.com',
-                                                                    'clearable': True
+                                                                    'clearable': True,
+                                                                    'hint': '登录时使用的邮箱账号，一般为完整的邮箱地址',
+                                                                    'persistent-hint': True,
                                                                 }
                                                             },
                                                         ]
@@ -653,7 +653,9 @@ class SmtpMsg(_PluginBase):
                                                                     'model': 'main_sender_password',
                                                                     'label': 'SMTP邮箱密码/Token',
                                                                     'placeholder': 'Passwd or Token',
-                                                                    'clearable': True
+                                                                    'clearable': True,
+                                                                    'hint': '邮箱账号的密码，或者从服务器获取到的token值',
+                                                                    'persistent-hint': True,
                                                                 }
                                                             },
                                                         ]
@@ -692,6 +694,8 @@ class SmtpMsg(_PluginBase):
                                                         'props': {
                                                             'model': 'secondary',
                                                             'label': '启用备用服务器',
+                                                            'hint': '允许启用备用服务器发送消息',
+                                                            'persistent-hint': True,
                                                         }
                                                     }
                                                 ]
@@ -708,7 +712,7 @@ class SmtpMsg(_PluginBase):
                                                         'props': {
                                                             'type': 'info',
                                                             'variant': 'tonal',
-                                                            'text': '主服务器发送失败时，会使用备用服务器发送消息。（两个服务器至少启用一个）'
+                                                            'text': '主服务器发送失败时，会使用备用服务器发送消息（两个服务器至少启用一个）'
                                                         }
                                                     }
                                                 ]
@@ -734,7 +738,9 @@ class SmtpMsg(_PluginBase):
                                                             'model': 'secondary_smtp_host',
                                                             'label': '备用SMTP服务器地址',
                                                             'placeholder': 'smtp.example.com',
-                                                            'clearable': True
+                                                            'clearable': True,
+                                                            'hint': '服务器的地址，不需要加任何协议头',
+                                                            'persistent-hint': True,
                                                         }
                                                     }
                                                 ]
@@ -751,8 +757,12 @@ class SmtpMsg(_PluginBase):
                                                         'props': {
                                                             'model': 'secondary_smtp_port',
                                                             'label': '备用SMTP服务器端口',
-                                                            'placeholder': '常见：25、465、587、995……',
-                                                            'clearable': True
+                                                            'placeholder': '常见：25、465、587、995',
+                                                            'clearable': True,
+                                                            'hint': '服务器地址的端口号：1~65535',
+                                                            'persistent-hint': True,
+                                                            'maxlength': 5,
+
                                                         }
                                                     }
                                                 ]
@@ -773,6 +783,8 @@ class SmtpMsg(_PluginBase):
                                                                       {'title': 'SSL', 'value': 'ssl'},
                                                                       {'title': 'TLS', 'value': 'tls'},
                                                                       ],
+                                                            'hint': '服务器的加密方式',
+                                                            'persistent-hint': True,
                                                         }
                                                     }
                                                 ]
@@ -798,7 +810,9 @@ class SmtpMsg(_PluginBase):
                                                             'model': 'secondary_sender_mail',
                                                             'label': '备用SMTP邮箱账号',
                                                             'placeholder': 'example@example.com',
-                                                            'clearable': True
+                                                            'clearable': True,
+                                                            'hint': '登录时使用的邮箱账号，一般为完整的邮箱地址',
+                                                            'persistent-hint': True,
                                                         }
                                                     }
                                                 ]
@@ -816,7 +830,9 @@ class SmtpMsg(_PluginBase):
                                                             'model': 'secondary_sender_password',
                                                             'label': '备用SMTP邮箱密码/Token',
                                                             'placeholder': 'Passwd or Token',
-                                                            "clearable": True
+                                                            "clearable": True,
+                                                            'hint': '邮箱账号的密码，或者从服务器获取到的token值',
+                                                            'persistent-hint': True,
                                                         }
                                                     }
                                                 ]
@@ -849,12 +865,58 @@ class SmtpMsg(_PluginBase):
                                                 },
                                                 'content': [
                                                     {
+                                                        'component': 'VSwitch',
+                                                        'props': {
+                                                            'model': 'enabled_image_send',
+                                                            'label': '发送图片',
+                                                            'hint': '嵌入图片到邮件模板中',
+                                                            'persistent-hint': True,
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 6
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VSwitch',
+                                                        'props': {
+                                                            'model': 'enabled_proxy_image',
+                                                            'label': '代理获取图片',
+                                                            'hint': '使用代理服务器发送图片，解决图片URL无法访问问题',
+                                                            'persistent-hint': True,
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                        ]
+                                    },
+                                    {
+                                        'component': 'VRow',
+                                        'props': {
+                                            'align': 'center'
+                                        },
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 6
+                                                },
+                                                'content': [
+                                                    {
                                                         'component': 'VTextField',
                                                         'props': {
                                                             'model': 'sender_name',
                                                             'label': '发件人用户名',
-                                                            'placeholder': '不输入时，默认使用发件人邮箱作为发件人用户名',
-                                                            'clearable': True
+                                                            'placeholder': 'MovePilot',
+                                                            'clearable': True,
+                                                            'hint': '不输入时，默认使用发件人邮箱作为发件人用户名',
+                                                            'persistent-hint': True,
                                                         }
                                                     }
                                                 ]
@@ -871,7 +933,9 @@ class SmtpMsg(_PluginBase):
                                                         'props': {
                                                             'model': 'receiver_mail',
                                                             'label': '收件人邮箱',
-                                                            'placeholder': '默认发送至发件人地址，多个邮箱用英文","分割'
+                                                            'placeholder': 'test1@example.com,test2@example.com',
+                                                            'hint': '默认发送至发件人地址，多个邮箱用英文逗号","分割',
+                                                            'persistent-hint': True,
                                                         }
                                                     }
                                                 ]
@@ -898,7 +962,9 @@ class SmtpMsg(_PluginBase):
                                                             'model': 'msgtypes',
                                                             'label': '消息类型',
                                                             'items': MsgTypeOptions,
-                                                            'clearable': True
+                                                            'clearable': True,
+                                                            'hint': '自定义需要接受并发送的消息类型',
+                                                            'persistent-hint': True,
                                                         }
                                                     }
                                                 ]
@@ -976,6 +1042,8 @@ class SmtpMsg(_PluginBase):
                                                         'props': {
                                                             'model': 'enabled_customizable_mail_template',
                                                             'label': '启用自定义模板',
+                                                            'hint': '开启后自定义模板将处于激活状态',
+                                                            'persistent-hint': True,
                                                         }
                                                     }
                                                 ]
@@ -1017,6 +1085,8 @@ class SmtpMsg(_PluginBase):
                                                         'props': {
                                                             'model': 'save',
                                                             'label': '写入自定义模板',
+                                                            'hint': '将配置写入到config路径的文件里',
+                                                            'persistent-hint': True,
                                                         }
                                                     }
                                                 ]
@@ -1033,6 +1103,8 @@ class SmtpMsg(_PluginBase):
                                                         'props': {
                                                             'model': 'reset',
                                                             'label': '恢复默认模板',
+                                                            'hint': '恢复模板，会覆盖当前的自定义模板',
+                                                            'persistent-hint': True,
                                                         }
                                                     }
                                                 ]
@@ -1100,7 +1172,7 @@ class SmtpMsg(_PluginBase):
                                                             'variant': 'tonal',
                                                             'text': "支持的变量："
                                                                     "类型：{msg_type}、用户ID：{userid}、标题：{title}、"
-                                                                    "内容：{text}、图片：cid:image。"
+                                                                    "内容：{text}、图片：cid:image"
                                                         }
                                                     }
                                                 ]
@@ -1125,7 +1197,7 @@ class SmtpMsg(_PluginBase):
                                                             'type': 'info',
                                                             'variant': 'tonal',
                                                             'text': '电脑端可用 "ctrl" + "/" '
-                                                                    '快捷键来快速打开/关闭需要注释的内容。'
+                                                                    '快捷键来快速打开/关闭需要注释的内容'
                                                         }
                                                     }
                                                 ]
@@ -1218,7 +1290,7 @@ class SmtpMsg(_PluginBase):
                             #                                         'type': 'info',
                             #                                         'variant': 'tonal',
                             #                                         'text': '该功能为结合已安装插件的插件名，对消息内容进行二次过滤；'
-                            #                                                 '不启用自定义过滤规则时，默认屏蔽整个插件的消息。'
+                            #                                                 '不启用自定义过滤规则时，默认屏蔽整个插件的消息'
                             #                                     }
                             #                                 }
                             #                             ]
@@ -1244,7 +1316,7 @@ class SmtpMsg(_PluginBase):
                             #                                         'chips': True,
                             #                                         'model': 'allow_plugins',
                             #                                         'label': '需要管理的插件',
-                            #                                         'placeholder': '留空，则默认选择所有插件。',
+                            #                                         'placeholder': '留空，则默认选择所有插件',
                             #                                         'items': PluginTypeOptions,
                             #                                         "clearable": True,
                             #                                     }
@@ -1273,7 +1345,7 @@ class SmtpMsg(_PluginBase):
                             #                                         'chips': True,
                             #                                         'model': 'block_plugins',
                             #                                         'label': '需要排除的插件',
-                            #                                         'placeholder': '留空，则默认不过滤任何插件。',
+                            #                                         'placeholder': '留空，则默认不过滤任何插件',
                             #                                         'items': PluginTypeOptions,
                             #                                         'clearable': True,
                             #                                     }
@@ -1301,7 +1373,7 @@ class SmtpMsg(_PluginBase):
                             #                                         'variant': 'tonal',
                             #                                         'text': '目前只支持插件名与邮件主题名一致的插件；'
                             #                                                 '邮件主题 =【插件名】、{title} = '
-                            #                                                 '【{local_plugin.plugin_name}】。'
+                            #                                                 '【{local_plugin.plugin_name}】'
                             #                                     }
                             #                                 }
                             #                             ]
@@ -1420,7 +1492,7 @@ class SmtpMsg(_PluginBase):
                             #                                                 'variant': 'tonal',
                             #                                                 'text': '注意：当"需要管理的插件"中的插件，'
                             #                                                         '在自定义过滤规则未配置内容时，'
-                            #                                                         '默认过滤整个插件的消息。'
+                            #                                                         '默认过滤整个插件的消息'
                             #                                             }
                             #                                         }
                             #                                     ]
@@ -1447,6 +1519,7 @@ class SmtpMsg(_PluginBase):
             'reset': False,
             'enabled_msg_rules': False,
             'enabled_customizable_msg_rules': False,
+            'enabled_proxy_image': True,
             'content': self.custom_template.read_text(encoding="utf-8"),
             'other_msgtypes': False,
             'msgtypes': [],
@@ -1540,7 +1613,7 @@ class SmtpMsg(_PluginBase):
 
     @SmtpMsgDecorator.log("服务器调用判断")
     def _determine_server(self, smtp_value, success, log_container):
-        msg = level = status = None
+        msg = level = None
         try:
             if smtp_value == 0:
                 server_type = "主"
@@ -1548,17 +1621,13 @@ class SmtpMsg(_PluginBase):
                 server_type = "备用"
             else:
                 raise Exception("未知的SMTP服务器类型")
-            if success is None:
-                if smtp_value == 0:
-                    status = True
+            if self._test and smtp_value == 1:
+                status = self._secondary
             else:
-                if self._test:
-                    status = self._secondary
+                if success:
+                    status = False
                 else:
-                    if success:
-                        status = False
-                    else:
-                        status = self._secondary
+                    status = True
             result = "开始调用" if status else "不需要调用"
             success = status
             msg = f'{server_type}服务器调用判断 - {result}'
@@ -1609,13 +1678,14 @@ class SmtpMsg(_PluginBase):
             level = 1
             return success
         except Exception as e:
-            if server:
-                server.quit()
+
             msg = f'出现错误 - {e}'
             success = False
             level = -1
             return success
         finally:
+            if server:
+                server.quit()
             log_container['msg'] = msg
             log_container['level'] = level
 
@@ -1919,51 +1989,39 @@ class SmtpMsg(_PluginBase):
             if image:
                 try:
                     try:
-                        base64_regex = re.compile(r'^data:image/([a-zA-Z]*);base64,(\S*)$', re.IGNORECASE)
                         if os.path.isfile(image):
-                            try:
-                                with open(image, 'rb') as image_file:
-                                    image_data = image_file.read()
-                            except FileNotFoundError as e:
-                                raise Exception(f"文件路径不存在 - {e}")
-                            except PermissionError as e:
-                                raise Exception(f"没有权限读取图片文件 - {e}")
-                            except IsADirectoryError as e:
-                                raise Exception(f"提供了一个目录地址，不是图片文件 - {e}")
-                            except Exception as e:
-                                raise Exception(f"读取图片文件时出错：{e}")
+                            with open(image, 'rb') as image_file:
+                                image_data = image_file.read()
                         else:
                             parsed_url = urllib.parse.urlparse(image)
                             if parsed_url.scheme in set(urllib.parse.uses_netloc):
-                                try:
-                                    response = requests.get(image)
-                                    if response.status_code == 200:
-                                        image_data = response.content
-                                    else:
-                                        raise Exception(f"获取图片失败。状态码：{response.status_code}")
-                                except Exception as e:
-                                    raise Exception(f"发生错误 - {e}")
-                            elif base64_regex.match(image):
-                                try:
-                                    base64_data = base64_regex.match(image).group('base64_data')
-                                    image_data = base64.b64decode(base64_data)
-                                except Exception as e:
-                                    raise Exception(f"解码 Base64 数据时出错 - {e}")
-                            elif isinstance(image, bytes):
-                                image_data = image
-                            else:
-                                raise Exception("无法识别的输入。请提供有效的数据； URL、本地文件路径、Base64、二进制编码的数据")
-                        if image_data:
-                            image_mime = MIMEImage(image_data)
-                            image_mime.add_header('Content-ID', '<image>')
-                            level = 1
-                            msg = '图片文件嵌入成功'
-                        else:
-                            raise Exception("无法获取图像数据")
+                                proxies = settings.PROXY if self._enabled_proxy_image else None
+                                response = requests.get(image, proxies=proxies, timeout=5)
+                                if response.status_code == 200:
+                                    image_data = response.content
+                                else:
+                                    raise Exception(f"获取图片失败。状态码：{response.status_code}")
+                    except requests.exceptions.RequestException as e:
+                        raise Exception(f"请求图片失败 - {e}")
                     except TypeError as e:
                         raise Exception(f"接受不支持的数据，无法识别图片文件 - {e}")
+                    except FileNotFoundError as e:
+                        raise Exception(f"文件路径不存在 - {e}")
+                    except PermissionError as e:
+                        raise Exception(f"没有权限读取图片文件 - {e}")
+                    except IsADirectoryError as e:
+                        raise Exception(f"提供了一个目录地址，不是图片文件 - {e}")
                     except Exception as e:
                         raise Exception(e)
+
+                    if image_data:
+                        image_mime = MIMEImage(image_data)
+                        image_mime.add_header('Content-ID', '<image>')
+                        level = 1
+                        msg = '图片文件嵌入成功'
+                    else:
+                        raise Exception("无法获取图像数据")
+
                 except Exception as e:
                     level = 2
                     msg = f'出现错误，跳过嵌入 - 原因 - {e}'
@@ -1990,7 +2048,7 @@ class SmtpMsg(_PluginBase):
                 raise Exception(f"拒绝了接受或发送者地址 - {e}")
             except smtplib.SMTPDataError as e:
                 raise Exception(f"拒绝了接受邮件数据，返回了错误响应 - {e}")
-            except (smtplib.SMTPServerDisconnected, ConnectionError):
+            except (smtplib.SMTPServerDisconnected, ConnectionError) as e:
                 raise Exception(f"断开了连接 - {e}")
             except smtplib.SMTPAuthenticationError as e:
                 raise Exception(f"身份验证失败 - {e}")
@@ -2033,8 +2091,15 @@ class SmtpMsg(_PluginBase):
                     msg = f"所有服务器发送{test_type}邮件失败！"
                 elif s_success is None:
                     msg = f"主服务器发送{test_type}邮件失败！备用服务器未启动！无法发送{test_type}邮件！"
+            elif m_success is None:
+                if s_success is True:
+                    msg = f"备用服务器发送{test_type}邮件成功！未启动主服务器！"
+                elif s_success is False:
+                    msg = f"备用服务器发送{test_type}邮件失败！未启动主服务器！"
+                elif s_success is None:
+                    msg = f"未启动主服务器与备用服务器！无法发送{test_type}邮件！"
             else:
-                raise Exception("出现未知错误，无法打印运行结果")
+                msg = f"未知的发送结果"
             level = 0
             if self._test:
                 return msg
