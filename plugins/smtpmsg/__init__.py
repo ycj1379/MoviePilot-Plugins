@@ -1,4 +1,3 @@
-import os
 import shutil
 import socket
 import requests
@@ -8,7 +7,7 @@ import urllib.parse
 from email.errors import HeaderParseError
 from functools import wraps
 from pathlib import Path
-from typing import Any, List, Dict, Tuple
+from typing import Any, List, Dict, Tuple, Union
 
 import smtplib
 from email.mime.text import MIMEText
@@ -86,7 +85,7 @@ class SmtpMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "2.7"
+    plugin_version = "2.8"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -100,6 +99,9 @@ class SmtpMsg(_PluginBase):
 
     # 配置文件路径
     default_template: Path = settings.CONFIG_PATH / ".." / "app" / "plugins" / "smtpmsg" / "template" / "default.html"
+    # 新版目录
+    # new_custom_template_dir: Path = settings.PLUGIN_DATA_PATH / "SmtpMsg" / "template"
+    # 旧版目录
     custom_template_dir: Path = settings.PLUGIN_DATA_PATH / "smtpmsg" / "template"
     custom_template: Path = custom_template_dir / "custom.html"
     _test_image: Path = settings.CONFIG_PATH / ".." / "app" / "plugins" / "smtpmsg" / "Synomail_A.png"
@@ -108,7 +110,7 @@ class SmtpMsg(_PluginBase):
     _enabled: bool = False
     _test: bool = False
     _log_more: bool = False
-    _timeout: float = 10
+    _server_timeout: Union[float, int, None] = 10
 
     _main: bool = True
     _main_smtp_host: str = None
@@ -126,6 +128,7 @@ class SmtpMsg(_PluginBase):
 
     _send_image: bool = False
     _enabled_proxy_image: bool = True
+    _image_timeout: Union[float, int, None] = 10
     _sender_name: str = None
     _receiver_mail: str = None
     _msgtypes = []
@@ -149,7 +152,7 @@ class SmtpMsg(_PluginBase):
             self._enabled = config.get("enabled", False)
             self._test = config.get("test", False)
             self._log_more = config.get("log_more", False)
-            self._timeout = config.get("timeout", 10)
+            self._server_timeout = config.get("server_timeout")
 
             self._main = config.get("main", True)
             self._main_smtp_host = config.get("main_smtp_host", )
@@ -167,6 +170,7 @@ class SmtpMsg(_PluginBase):
 
             self._send_image = config.get("enabled_image_send", False)
             self._enabled_proxy_image = config.get("enabled_proxy_image", True)
+            self._image_timeout = config.get("image_timeout")
             self._sender_name = config.get("sender_name", )
             self._receiver_mail = config.get("receiver_mail", "")
             self._msgtypes = config.get("msgtypes", [])
@@ -192,7 +196,7 @@ class SmtpMsg(_PluginBase):
             'enabled': self._enabled,
             'test': self._test,
             'log_more': self._log_more,
-            'timeout': self._timeout,
+            'server_timeout': self._server_timeout,
 
             'main': self._main,
             'main_smtp_host': self._main_smtp_host,
@@ -210,6 +214,7 @@ class SmtpMsg(_PluginBase):
 
             'enabled_image_send': self._send_image,
             'enabled_proxy_image': self._enabled_proxy_image,
+            'image_timeout': self._image_timeout,
             'sender_name': self._sender_name,
             'receiver_mail': self._receiver_mail,
             'msgtypes': self._msgtypes,
@@ -429,7 +434,7 @@ class SmtpMsg(_PluginBase):
                                     {
                                         'component': 'VTextField',
                                         'props': {
-                                            'model': 'timeout',
+                                            'model': 'server_timeout',
                                             'label': '超时时间（秒）',
                                             'placeholder': '10',
                                             'clearable': True,
@@ -897,7 +902,7 @@ class SmtpMsg(_PluginBase):
                                                 'component': 'VCol',
                                                 'props': {
                                                     'cols': 12,
-                                                    'md': 6
+                                                    'md': 3
                                                 },
                                                 'content': [
                                                     {
@@ -923,7 +928,27 @@ class SmtpMsg(_PluginBase):
                                                         'props': {
                                                             'model': 'enabled_proxy_image',
                                                             'label': '代理获取图片',
-                                                            'hint': '使用代理服务器发送图片，解决图片URL无法访问问题',
+                                                            'hint': '使用代理服务器获取图片数据',
+                                                            'persistent-hint': True,
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 3
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VTextField',
+                                                        'props': {
+                                                            'model': 'image_timeout',
+                                                            'label': '获取图片超时时间（秒）',
+                                                            'placeholder': '10',
+                                                            'clearable': True,
+                                                            'hint': '获取图片的超时时间，默认10秒',
                                                             'persistent-hint': True,
                                                         }
                                                     }
@@ -1547,7 +1572,7 @@ class SmtpMsg(_PluginBase):
             'enabled': False,
             'test': False,
             'log_more': False,
-            'timeout': 10,
+            'server_timeout': 10,
 
             'main': True,
             'main_smtp_host': "",
@@ -1565,6 +1590,7 @@ class SmtpMsg(_PluginBase):
 
             'enabled_image_send': False,
             'enabled_proxy_image': True,
+            'image_timeout': 10,
             'sender_name': "",
             'receiver_mail': "",
             'msgtypes': [],
@@ -1893,18 +1919,19 @@ class SmtpMsg(_PluginBase):
 
     @SmtpMsgDecorator.log("服务器连接")
     def _connect_to_smtp_server(self, log_container):
-        msg = level = None
+        msg = level = server_timeout = None
         try:
             try:
-                if isinstance(self._timeout, float) and self._timeout > 0:
-                    timeout = float(self._timeout)
-                else:
-                    timeout = 10
+                try:
+                    if float(self._server_timeout) > 0:
+                        server_timeout = float(self._server_timeout)
+                except ValueError:
+                    server_timeout = float(10)
 
                 if self._encryption == "ssl":
-                    server = smtplib.SMTP_SSL(self._host, self._port, timeout=timeout)
+                    server = smtplib.SMTP_SSL(self._host, self._port, timeout=server_timeout)
                 else:
-                    server = smtplib.SMTP(self._host, self._port, timeout=timeout)
+                    server = smtplib.SMTP(self._host, self._port, timeout=server_timeout)
                     if self._encryption == "tls":
                         server.starttls()
 
@@ -2050,20 +2077,25 @@ class SmtpMsg(_PluginBase):
 
     @SmtpMsgDecorator.log("图片嵌入")
     def ___msg_build_email_body_embed_image(self, image, log_container):
-        msg = level = image_mime = None
+        msg = level = image_mime = image_timeout = None
         if self._send_image:
             if image:
                 try:
                     try:
-                        image = str(image)
-                        if os.path.isfile(image):
+                        image_path = Path(image).resolve()
+                        if image_path.is_file():
                             with open(image, 'rb') as image_file:
                                 image_data = image_file.read()
                         else:
                             parsed_url = urllib.parse.urlparse(image)
                             if parsed_url.scheme in set(urllib.parse.uses_netloc):
                                 proxies = settings.PROXY if self._enabled_proxy_image else None
-                                response = requests.get(image, proxies=proxies, timeout=5)
+                                try:
+                                    if float(self._image_timeout) > 0:
+                                        image_timeout = float(self._image_timeout)
+                                except ValueError:
+                                    image_timeout = float(10)
+                                response = requests.get(image, proxies=proxies, timeout=image_timeout)
                                 if response.status_code == 200:
                                     image_data = response.content
                                 else:
@@ -2071,7 +2103,7 @@ class SmtpMsg(_PluginBase):
                     except requests.exceptions.RequestException as e:
                         raise Exception(f"请求图片失败 - {e}")
                     except TypeError as e:
-                        raise Exception(f"接受不支持的数据，无法识别图片文件 - {e}")
+                        raise Exception(f"接受不支持的数据 - {e}")
                     except FileNotFoundError as e:
                         raise Exception(f"文件路径不存在 - {e}")
                     except PermissionError as e:
