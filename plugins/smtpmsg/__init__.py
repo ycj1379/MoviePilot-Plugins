@@ -85,7 +85,7 @@ class SmtpMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "2.6"
+    plugin_version = "2.6.1"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -1893,7 +1893,7 @@ class SmtpMsg(_PluginBase):
     @SmtpMsgDecorator.log("服务器连接")
     def _connect_to_smtp_server(self, log_container):
         msg = level = None
-        timeout = self.timeout if self.timeout else 10
+        timeout = self._timeout if self._timeout else 10
         try:
             try:
                 if self._encryption == "ssl":
