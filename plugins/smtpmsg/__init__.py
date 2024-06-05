@@ -46,6 +46,7 @@ class SmtpMsgDecorator:
                 except Exception as e:
                     logs['msg'] = f"{mode_name}模块 运行失败 - 原因 - {e}"
                     logs['level'] = -1
+                    raise Exception(logs['msg'])
                 finally:
                     level = logs['level']
                     msg = logs['msg']
@@ -85,7 +86,7 @@ class SmtpMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "2.6.1"
+    plugin_version = "2.7"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -107,7 +108,7 @@ class SmtpMsg(_PluginBase):
     _enabled: bool = False
     _test: bool = False
     _log_more: bool = False
-    _timeout: int = 10
+    _timeout: float = 10
 
     _main: bool = True
     _main_smtp_host: str = None
@@ -1893,9 +1894,13 @@ class SmtpMsg(_PluginBase):
     @SmtpMsgDecorator.log("服务器连接")
     def _connect_to_smtp_server(self, log_container):
         msg = level = None
-        timeout = self._timeout if self._timeout else 10
         try:
             try:
+                if isinstance(self._timeout, float) and self._timeout > 0:
+                    timeout = float(self._timeout)
+                else:
+                    timeout = 10
+
                 if self._encryption == "ssl":
                     server = smtplib.SMTP_SSL(self._host, self._port, timeout=timeout)
                 else:
@@ -2050,6 +2055,7 @@ class SmtpMsg(_PluginBase):
             if image:
                 try:
                     try:
+                        image = str(image)
                         if os.path.isfile(image):
                             with open(image, 'rb') as image_file:
                                 image_data = image_file.read()
