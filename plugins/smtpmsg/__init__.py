@@ -42,10 +42,10 @@ class SmtpMsgDecorator:
                     if log_more:
                         logger.info(f"日志汇报 - 状态 - {mode_name}模块 - 开始运行")
                     result = func(*args, log_container=logs, **kwargs)
+                    return result
                 except Exception as e:
                     logs['msg'] = f"{mode_name}模块 运行失败 - 原因 - {e}"
                     logs['level'] = -1
-                    raise Exception(logs['msg'])
                 finally:
                     level = logs['level']
                     msg = logs['msg']
@@ -73,10 +73,7 @@ class SmtpMsgDecorator:
                         msg = f"{mode_name}模块 - 运行完成"
                         status = "状态"
                         logger.info(f"日志汇报 - {status} - {msg}")
-                return result
-
             return log_wrapper
-
         return log_decorator
 
 
@@ -88,7 +85,7 @@ class SmtpMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "2.5.1"
+    plugin_version = "2.6"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -100,43 +97,46 @@ class SmtpMsg(_PluginBase):
     # 可使用的用户级别
     auth_level = 1
 
-    # 私有属性
-    _enabled: bool = False
-    _send_image: bool = False
-    _main: bool = True
-    _secondary: bool = False
-    _test: bool = False
-    _log_more: bool = False
-    _other_msgtypes: bool = False
-    _enabled_customizable_mail_template: bool = False
-    _save: bool = False
-    _reset: bool = False
-    _enabled_msg_rules: bool = False
-    _enabled_customizable_msg_rules: bool = False
-    _enabled_proxy_image: bool = True
-
+    # 配置文件路径
     default_template: Path = settings.CONFIG_PATH / ".." / "app" / "plugins" / "smtpmsg" / "template" / "default.html"
     custom_template_dir: Path = settings.PLUGIN_DATA_PATH / "smtpmsg" / "template"
     custom_template: Path = custom_template_dir / "custom.html"
     _test_image: Path = settings.CONFIG_PATH / ".." / "app" / "plugins" / "smtpmsg" / "Synomail_A.png"
 
+    # 私有属性
+    _enabled: bool = False
+    _test: bool = False
+    _log_more: bool = False
+    _timeout: int = 10
+
+    _main: bool = True
     _main_smtp_host: str = None
     _main_smtp_port: int = None
     _main_smtp_encryption: str = "not_encrypted"
     _main_sender_mail: str = None
     _main_sender_password: str = None
+
+    _secondary: bool = False
     _secondary_smtp_host: str = None
     _secondary_smtp_port: int = None
     _secondary_smtp_encryption: str = "not_encrypted"
     _secondary_sender_mail: str = None
     _secondary_sender_password: str = None
 
+    _send_image: bool = False
+    _enabled_proxy_image: bool = True
     _sender_name: str = None
     _receiver_mail: str = None
-
-    # 消息类型
     _msgtypes = []
+    _other_msgtypes: bool = False
+
+    _enabled_customizable_mail_template: bool = False
+    _save: bool = False
+    _reset: bool = False
     _content = ""
+
+    _enabled_msg_rules: bool = False
+    _enabled_customizable_msg_rules: bool = False
 
     def init_plugin(self, config: dict = None):
         """
@@ -146,32 +146,38 @@ class SmtpMsg(_PluginBase):
         # 读取配置
         if config:
             self._enabled = config.get("enabled", False)
-            self._send_image = config.get("enabled_image_send", True)
-            self._main = config.get("main", True)
-            self._secondary = config.get("secondary", False)
             self._test = config.get("test", False)
             self._log_more = config.get("log_more", False)
-            self._other_msgtypes = config.get("other_msgtypes", False)
-            self._enabled_customizable_mail_template = config.get("enabled_customizable_mail_template", False)
-            self._save = config.get("save", False)
-            self._reset = config.get("reset", False)
-            self._enabled_msg_rules = config.get("enabled_msg_rules", False)
-            self._enabled_customizable_msg_rules = config.get("enabled_customizable_msg_rules", False)
-            self._enabled_proxy_image = config.get("enabled_proxy_image", True)
+            self._timeout = config.get("timeout", 10)
+
+            self._main = config.get("main", True)
             self._main_smtp_host = config.get("main_smtp_host", )
             self._main_smtp_port = config.get("main_smtp_port", )
             self._main_smtp_encryption = config.get("main_smtp_encryption", "not_encrypted")
             self._main_sender_mail = config.get("main_sender_mail", )
             self._main_sender_password = config.get("main_sender_password", )
+
+            self._secondary = config.get("secondary", False)
             self._secondary_smtp_host = config.get("secondary_smtp_host", )
             self._secondary_smtp_port = config.get("secondary_smtp_port", )
             self._secondary_smtp_encryption = config.get("secondary_smtp_encryption", "not_encrypted")
             self._secondary_sender_mail = config.get("secondary_sender_mail", )
             self._secondary_sender_password = config.get("secondary_sender_password", )
+
+            self._send_image = config.get("enabled_image_send", False)
+            self._enabled_proxy_image = config.get("enabled_proxy_image", True)
             self._sender_name = config.get("sender_name", )
             self._receiver_mail = config.get("receiver_mail", "")
             self._msgtypes = config.get("msgtypes", [])
+            self._other_msgtypes = config.get("other_msgtypes", False)
+
+            self._enabled_customizable_mail_template = config.get("enabled_customizable_mail_template", False)
+            self._save = config.get("save", False)
+            self._reset = config.get("reset", False)
             self._content = config.get("content", self.custom_template.read_text(encoding="utf-8"))
+
+            self._enabled_msg_rules = config.get("enabled_msg_rules", False)
+            self._enabled_customizable_msg_rules = config.get("enabled_customizable_msg_rules", False)
 
         self._check_path()
         self._template_settings()
@@ -183,29 +189,38 @@ class SmtpMsg(_PluginBase):
         """
         config = {
             'enabled': self._enabled,
-            'enabled_image_send': self._send_image,
-            'main': self._main,
-            'secondary': self._secondary,
             'test': self._test,
             'log_more': self._log_more,
-            'enabled_customizable_mail_template': self._enabled_customizable_mail_template,
-            'enabled_msg_rules': self._enabled_msg_rules,
-            'enabled_customizable_msg_rules': self._enabled_customizable_msg_rules,
-            'content': self.custom_template.read_text(encoding="utf-8"),
-            'other_msgtypes': self._other_msgtypes,
-            'msgtypes': self._msgtypes,
+            'timeout': self._timeout,
+
+            'main': self._main,
             'main_smtp_host': self._main_smtp_host,
             'main_smtp_port': self._main_smtp_port,
             'main_smtp_encryption': self._main_smtp_encryption,
             'main_sender_mail': self._main_sender_mail,
             'main_sender_password': self._main_sender_password,
+
+            'secondary': self._secondary,
             'secondary_smtp_host': self._secondary_smtp_host,
             'secondary_smtp_port': self._secondary_smtp_port,
             'secondary_smtp_encryption': self._secondary_smtp_encryption,
             'secondary_sender_mail': self._secondary_sender_mail,
             'secondary_sender_password': self._secondary_sender_password,
+
+            'enabled_image_send': self._send_image,
+            'enabled_proxy_image': self._enabled_proxy_image,
             'sender_name': self._sender_name,
-            'receiver_mail': self._receiver_mail
+            'receiver_mail': self._receiver_mail,
+            'msgtypes': self._msgtypes,
+            'other_msgtypes': self._other_msgtypes,
+
+            'enabled_customizable_mail_template': self._enabled_customizable_mail_template,
+            'save': self._save,
+            'reset': self._reset,
+            'content': self.custom_template.read_text(encoding="utf-8"),
+
+            'enabled_msg_rules': self._enabled_msg_rules,
+            'enabled_customizable_msg_rules': self._enabled_customizable_msg_rules,
         }
         self.update_config(config)
 
@@ -353,7 +368,7 @@ class SmtpMsg(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 3
+                                    'md': 3,
                                 },
                                 'content': [
                                     {
@@ -371,7 +386,7 @@ class SmtpMsg(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 6
+                                    'md': 3,
                                 },
                                 'content': [
                                     {
@@ -389,7 +404,7 @@ class SmtpMsg(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 3
+                                    'md': 3,
                                 },
                                 'content': [
                                     {
@@ -398,6 +413,26 @@ class SmtpMsg(_PluginBase):
                                             'model': 'log_more',
                                             'label': '记录更多日志',
                                             'hint': '细分日志细节，方便排查问题',
+                                            'persistent-hint': True,
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': '12',
+                                    'md': 3,
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'timeout',
+                                            'label': '超时时间（秒）',
+                                            'placeholder': '10',
+                                            'clearable': True,
+                                            'hint': '连接时的超时时间，默认10秒',
                                             'persistent-hint': True,
                                         }
                                     }
@@ -1509,32 +1544,38 @@ class SmtpMsg(_PluginBase):
             }
         ], {
             'enabled': False,
-            'enabled_image_send': True,
-            'main': True,
-            'secondary': False,
             'test': False,
             'log_more': False,
-            'enabled_customizable_mail_template': False,
-            'save': False,
-            'reset': False,
-            'enabled_msg_rules': False,
-            'enabled_customizable_msg_rules': False,
-            'enabled_proxy_image': True,
-            'content': self.custom_template.read_text(encoding="utf-8"),
-            'other_msgtypes': False,
-            'msgtypes': [],
+            'timeout': 10,
+
+            'main': True,
             'main_smtp_host': "",
             'main_smtp_port': "",
             'main_smtp_encryption': "not_encrypted",
             'main_sender_mail': "",
             'main_sender_password': "",
+
+            'secondary': False,
             'secondary_smtp_host': "",
             'secondary_smtp_port': "",
             'secondary_smtp_encryption': "not_encrypted",
             'secondary_sender_mail': "",
             'secondary_sender_password': "",
+
+            'enabled_image_send': False,
+            'enabled_proxy_image': True,
             'sender_name': "",
-            'receiver_mail': ""
+            'receiver_mail': "",
+            'msgtypes': [],
+            'other_msgtypes': False,
+
+            'enabled_customizable_mail_template': False,
+            'save': False,
+            'reset': False,
+            'content': self.custom_template.read_text(encoding="utf-8"),
+
+            'enabled_msg_rules': False,
+            'enabled_customizable_msg_rules': False,
         }
 
     def get_page(self) -> List[dict]:
@@ -1684,8 +1725,27 @@ class SmtpMsg(_PluginBase):
             level = -1
             return success
         finally:
+            self._quit_server(server=server)
+            log_container['msg'] = msg
+            log_container['level'] = level
+
+    @SmtpMsgDecorator.log("关闭连接")
+    def _quit_server(self, server, log_container):
+        """
+        断开服务器连接
+        """
+        msg = level = None
+        try:
             if server:
                 server.quit()
+                msg = '关闭连接成功'
+            else:
+                msg = '未连接到服务器，无需关闭'
+            level = 1
+        except Exception as e:
+            level = -1
+            msg = f'关闭连接失败 - 原因 - {e}'
+        finally:
             log_container['msg'] = msg
             log_container['level'] = level
 
@@ -1833,12 +1893,13 @@ class SmtpMsg(_PluginBase):
     @SmtpMsgDecorator.log("服务器连接")
     def _connect_to_smtp_server(self, log_container):
         msg = level = None
+        timeout = self.timeout if self.timeout else 10
         try:
             try:
                 if self._encryption == "ssl":
-                    server = smtplib.SMTP_SSL(self._host, self._port, timeout=5)
+                    server = smtplib.SMTP_SSL(self._host, self._port, timeout=timeout)
                 else:
-                    server = smtplib.SMTP(self._host, self._port, timeout=5)
+                    server = smtplib.SMTP(self._host, self._port, timeout=timeout)
                     if self._encryption == "tls":
                         server.starttls()
 
@@ -2069,37 +2130,28 @@ class SmtpMsg(_PluginBase):
 
     @SmtpMsgDecorator.log("结果汇报")
     def _generate_result_log(self, m_success, s_success, log_container):
+        s_msg = m_msg = msg = level = None
         test_type = "测试" if self._test else ""
-        msg = level = None
         try:
             if m_success is True:
-                if s_success is True:
-                    if self._test:
-                        msg = f"所有服务器发送{test_type}邮件成功！"
-                elif s_success is False:
-                    if self._test is True:
-                        msg = f"主服务器发送{test_type}邮件成功！备用服务器发送{test_type}邮件失败！"
-                elif s_success is None:
-                    if self._test is True:
-                        msg = f"主服务器发送{test_type}邮件成功！未启动备用服务器！"
-                    else:
-                        msg = f"主服务器发送{test_type}邮件成功！"
+                m_msg = f"主服务器发送{test_type}邮件成功！"
             elif m_success is False:
-                if s_success is True:
-                    msg = f"备用服务器发送{test_type}邮件成功！主服务器发送{test_type}邮件失败！"
-                elif s_success is False:
-                    msg = f"所有服务器发送{test_type}邮件失败！"
-                elif s_success is None:
-                    msg = f"主服务器发送{test_type}邮件失败！备用服务器未启动！无法发送{test_type}邮件！"
+                m_msg = f"主服务器发送{test_type}邮件失败！"
             elif m_success is None:
-                if s_success is True:
-                    msg = f"备用服务器发送{test_type}邮件成功！未启动主服务器！"
-                elif s_success is False:
-                    msg = f"备用服务器发送{test_type}邮件失败！未启动主服务器！"
-                elif s_success is None:
-                    msg = f"未启动主服务器与备用服务器！无法发送{test_type}邮件！"
-            else:
-                msg = f"未知的发送结果"
+                m_msg = f""
+
+            if s_success is True:
+                s_msg = f"备用服务器发送{test_type}邮件成功！"
+            elif s_success is False:
+                s_msg = f"备用服务器发送{test_type}邮件失败！"
+            elif s_success is None:
+                s_msg = f""
+
+            if m_success is not None and s_msg is not None:
+                msg = f"{m_msg} {s_msg}"
+            elif m_success is None and s_msg is None:
+                msg = f"未启用主服务器与备用服务器！无法发送{test_type}邮件！"
+
             level = 0
             if self._test:
                 return msg
