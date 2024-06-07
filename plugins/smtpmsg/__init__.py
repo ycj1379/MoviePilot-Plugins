@@ -85,7 +85,7 @@ class SmtpMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "2.8"
+    plugin_version = "2.9"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -1746,7 +1746,6 @@ class SmtpMsg(_PluginBase):
             level = 1
             return success
         except Exception as e:
-
             msg = f'出现错误 - {e}'
             success = False
             level = -1
@@ -1923,9 +1922,12 @@ class SmtpMsg(_PluginBase):
         try:
             try:
                 try:
-                    if float(self._server_timeout) > 0:
-                        server_timeout = float(self._server_timeout)
-                except ValueError:
+                    if self._server_timeout:
+                        if float(self._server_timeout) > 0:
+                            server_timeout = float(self._server_timeout)
+                    else:
+                        server_timeout = float(10)
+                except (ValueError, TypeError):
                     server_timeout = float(10)
 
                 if self._encryption == "ssl":
@@ -2091,9 +2093,12 @@ class SmtpMsg(_PluginBase):
                             if parsed_url.scheme in set(urllib.parse.uses_netloc):
                                 proxies = settings.PROXY if self._enabled_proxy_image else None
                                 try:
-                                    if float(self._image_timeout) > 0:
-                                        image_timeout = float(self._image_timeout)
-                                except ValueError:
+                                    if self._image_timeout:
+                                        if float(self._image_timeout) > 0:
+                                            image_timeout = float(self._image_timeout)
+                                    else:
+                                        image_timeout = float(10)
+                                except (TypeError, ValueError):
                                     image_timeout = float(10)
                                 response = requests.get(image, proxies=proxies, timeout=image_timeout)
                                 if response.status_code == 200:
