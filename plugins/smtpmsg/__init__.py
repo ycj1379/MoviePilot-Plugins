@@ -7,38 +7,55 @@ import urllib.parse
 from email.errors import HeaderParseError
 from functools import wraps
 from pathlib import Path
-from typing import Any, List, Dict, Tuple, Union
+from typing import Any, List, Dict, Tuple, Union, Optional
 
 import smtplib
 from email.mime.text import MIMEText
 from email.header import Header
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
+
+from apscheduler.schedulers.background import BackgroundScheduler
+
 from app.core.config import settings
 from app.core.event import eventmanager, Event
-# from app.core.plugin import PluginManager
 from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas.types import EventType, NotificationType
 
-lock = threading.Lock()
+SmtpMsgLock = threading.Lock()
 
 
 class SmtpMsgDecorator:
     """
     模块化日志装饰器
     """
+    enabled_max_lines = None
+    log_more = False
+    max_lines = 0
+    log_path = None
 
-    @staticmethod
-    def log(mode_name):
+    @classmethod
+    def set(cls, enabled_max_lines, max_lines, log_more, log_path):
+        """
+        设置日志参数
+        """
+        cls.max_lines = max_lines
+        cls.log_more = log_more
+        cls.log_path = log_path
+        cls.enabled_max_lines = enabled_max_lines
+
+    @classmethod
+    def log(cls, mode_name):
+        """
+        日志装饰器
+        """
         def log_decorator(func):
             @wraps(func)
             def log_wrapper(*args, **kwargs):
-                instance_self = args[0] if args else None
-                log_more = getattr(instance_self, '_log_more', None) if instance_self else None
                 logs = {'msg': "没有日志", 'level': 1}
                 try:
-                    if log_more:
+                    if cls.log_more:
                         logger.info(f"日志汇报 - 状态 - {mode_name}模块 - 开始运行")
                     result = func(*args, log_container=logs, **kwargs)
                     return result
@@ -49,32 +66,51 @@ class SmtpMsgDecorator:
                 finally:
                     level = logs['level']
                     msg = logs['msg']
-                    status = None
                     if level == 0:
-                        status = "状态"
+                        logger.info(f"日志汇报 - 状态 - {msg}")
                     elif level == 1:
-                        if log_more:
-                            status = "汇报"
+                        if cls.log_more:
+                            logger.info(f"日志汇报 - 汇报 - {msg}")
+                    elif level == 3:
+                        logger.info(f"日志汇报 - 汇报 - {msg}")
                     elif level == 2:
-                        status = "警告"
+                        logger.warning(f"日志汇报 - 警告 - {msg}")
                     elif level == -1:
-                        status = "错误"
+                        logger.error(f"日志汇报 - 错误 - {msg}")
                     else:
-                        status = "未知"
-                    if status:
-                        if status == "错误":
-                            logger.error(f"日志汇报 - {status} - {msg}")
-                        elif status == "警告" or status == "未知":
-                            logger.warning(f"日志汇报 - {status} - {msg}")
-                        else:
-                            logger.info(f"日志汇报 - {status} - {msg}")
-
-                    if (level == 0, 1, 2) and status != ("错误", "未知"):
-                        msg = f"{mode_name}模块 - 运行完成"
-                        status = "状态"
-                        logger.info(f"日志汇报 - {status} - {msg}")
+                        logger.warning(f"日志汇报 - 未知 - {msg}")
+                    if level == (0 or 1 or 2):
+                        logger.info(f"日志汇报 - 状态 - {mode_name}模块 - 运行完成")
             return log_wrapper
         return log_decorator
+
+    @classmethod
+    def clean_log(cls):
+        """
+        整理日志装饰器
+        """
+        def clean_log_decorator(func):
+            @wraps(func)
+            def clean_log_wrapper(*args, **kwargs):
+                result = None
+                try:
+                    result = func(*args, **kwargs)
+                    if not cls.enabled_max_lines:
+                        return
+                    if cls.max_lines is None or cls.max_lines == "" or int(cls.max_lines) <= 0:
+                        return
+                    with open(cls.log_path, 'r+', encoding="utf-8") as file:
+                        lines = file.readlines()
+                        if len(lines) > int(cls.max_lines):
+                            file.seek(0)
+                            file.writelines(lines[-int(cls.max_lines):])
+                            file.truncate()
+                except Exception as e:
+                    logger.warning(f"日志汇报 - 警告 - 日志最大保存限制失败 - 原因 - {e}")
+                finally:
+                    return result
+            return clean_log_wrapper
+        return clean_log_decorator
 
 
 class SmtpMsg(_PluginBase):
@@ -85,7 +121,7 @@ class SmtpMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "2.9"
+    plugin_version = "3.0"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -105,33 +141,34 @@ class SmtpMsg(_PluginBase):
     custom_template_dir: Path = settings.PLUGIN_DATA_PATH / "smtpmsg" / "template"
     custom_template: Path = custom_template_dir / "custom.html"
     _test_image: Path = settings.CONFIG_PATH / ".." / "app" / "plugins" / "smtpmsg" / "Synomail_A.png"
+    log_path: Path = settings.LOG_PATH / "plugins" / "smtpmsg.log"
 
     # 私有属性
     _enabled: bool = False
     _test: bool = False
-    _log_more: bool = False
     _server_timeout: Union[float, int, None] = 10
 
     _main: bool = True
-    _main_smtp_host: str = None
-    _main_smtp_port: int = None
-    _main_smtp_encryption: str = "not_encrypted"
-    _main_sender_mail: str = None
-    _main_sender_password: str = None
+    _main_smtp_host: Optional[str] = None
+    _main_smtp_port: Optional[int] = None
+    _main_smtp_encryption: Optional[str] = "not_encrypted"
+    _main_sender_mail: Optional[str] = None
+    _main_sender_password: Optional[str] = None
 
     _secondary: bool = False
-    _secondary_smtp_host: str = None
-    _secondary_smtp_port: int = None
-    _secondary_smtp_encryption: str = "not_encrypted"
-    _secondary_sender_mail: str = None
-    _secondary_sender_password: str = None
+    _secondary_smtp_host: Optional[str] = None
+    _secondary_smtp_port: Optional[int] = None
+    _secondary_smtp_encryption: Optional[str] = "not_encrypted"
+    _secondary_sender_mail: Optional[str] = None
+    _secondary_sender_password: Optional[str] = None
 
     _send_image: bool = False
     _enabled_proxy_image: bool = True
+    _enabled_github_proxy_image: bool = True
     _image_timeout: Union[float, int, None] = 10
-    _sender_name: str = None
-    _receiver_mail: str = None
-    _msgtypes = []
+    _sender_name: Optional[str] = None
+    _receiver_mail: Optional[str] = None
+    _msgtypes: List[str] = []
     _other_msgtypes: bool = False
 
     _enabled_customizable_mail_template: bool = False
@@ -142,6 +179,15 @@ class SmtpMsg(_PluginBase):
     _enabled_msg_rules: bool = False
     _enabled_customizable_msg_rules: bool = False
 
+    _log_more: bool = False
+    _clean_all_log: bool = False
+    _onlyonce_clean: bool = False
+    _enabled_max_lines: bool = False
+    _max_lines: Optional[int] = 100
+
+    _scheduler: Optional[BackgroundScheduler] = BackgroundScheduler(timezone=settings.TZ)
+    _event = threading.Event()
+
     def init_plugin(self, config: dict = None):
         """
         初始化插件
@@ -151,7 +197,6 @@ class SmtpMsg(_PluginBase):
         if config:
             self._enabled = config.get("enabled", False)
             self._test = config.get("test", False)
-            self._log_more = config.get("log_more", False)
             self._server_timeout = config.get("server_timeout")
 
             self._main = config.get("main", True)
@@ -170,6 +215,7 @@ class SmtpMsg(_PluginBase):
 
             self._send_image = config.get("enabled_image_send", False)
             self._enabled_proxy_image = config.get("enabled_proxy_image", True)
+            self._enabled_github_proxy_image = config.get("enabled_github_proxy_image", True)
             self._image_timeout = config.get("image_timeout")
             self._sender_name = config.get("sender_name", )
             self._receiver_mail = config.get("receiver_mail", "")
@@ -184,9 +230,17 @@ class SmtpMsg(_PluginBase):
             self._enabled_msg_rules = config.get("enabled_msg_rules", False)
             self._enabled_customizable_msg_rules = config.get("enabled_customizable_msg_rules", False)
 
+            self._log_more = config.get("log_more", False)
+            self._clean_all_log = config.get("clean_all_log", False)
+            self._onlyonce_clean = config.get("onlyonce_clean", False)
+            self._enabled_max_lines = config.get("enabled_max_lines", False)
+            self._max_lines = config.get("max_lines", 100)
+        SmtpMsgDecorator.set(max_lines=self._max_lines, log_more=self._log_more,
+                             log_path=self.log_path, enabled_max_lines=self._enabled_max_lines)
         self._check_path()
         self._template_settings()
         self._run_plugin()
+        self._onlyonce_clean_logs()
 
     def __update_config(self):
         """
@@ -195,7 +249,6 @@ class SmtpMsg(_PluginBase):
         config = {
             'enabled': self._enabled,
             'test': self._test,
-            'log_more': self._log_more,
             'server_timeout': self._server_timeout,
 
             'main': self._main,
@@ -214,6 +267,7 @@ class SmtpMsg(_PluginBase):
 
             'enabled_image_send': self._send_image,
             'enabled_proxy_image': self._enabled_proxy_image,
+            'enabled_github_proxy_image': self._enabled_github_proxy_image,
             'image_timeout': self._image_timeout,
             'sender_name': self._sender_name,
             'receiver_mail': self._receiver_mail,
@@ -227,109 +281,14 @@ class SmtpMsg(_PluginBase):
 
             'enabled_msg_rules': self._enabled_msg_rules,
             'enabled_customizable_msg_rules': self._enabled_customizable_msg_rules,
+
+            'log_more': self._log_more,
+            'clean_all_log': self._clean_all_log,
+            'onlyonce_clean': self._onlyonce_clean,
+            'max_lines': self._max_lines,
+            'enabled_max_lines': self._enabled_max_lines,
         }
         self.update_config(config)
-
-    def _check_path(self):
-        """
-        检查路径与文件
-        """
-        self.__check_template_file()
-
-    @SmtpMsgDecorator.log("文件检查")
-    def __check_template_file(self, log_container):
-        msg = level = None
-        try:
-            # 自定义模板不存在，创建模板文件
-            if not self.custom_template.exists():
-                self.custom_template_dir.mkdir(parents=True, exist_ok=True)
-                self.custom_template.touch()
-                # 如果_content不为空，写入自定义模板
-                if self._content:
-                    self.custom_template.write_text(self._content, encoding="utf-8")
-                    msg = "自定义邮件模板文件不存在，已创建模板文件，已将数据库内配置写入文件"
-                # 否则，复制默认模板到自定义模板
-                else:
-                    self.default_template.replace(self.custom_template)
-                    msg = "自定义邮件模板文件不存在，已创建模板文件，数据库内没有该项配置，还原使用默认配置"
-
-            # 自定义模板存在
-            elif self.custom_template.exists():
-                # 内容是否一致
-                if (self._save is not True
-                        and self._reset is not True
-                        and self._content != self.custom_template.read_text(encoding="utf-8")):
-                    self._content = self.custom_template.read_text(encoding="utf-8")
-                    self.__update_config()
-                    msg = "自定义邮件模板文件已存在，但与数据库内缓存不一致，提取文件配置并覆盖数据库配置"
-                else:
-                    msg = '自定义邮件模板文件已存在'
-                level = 1
-        except Exception as e:
-            level = -1
-            raise Exception(f'未知错误 - 原因 - {e}')
-        finally:
-            log_container['msg'] = msg
-            log_container['level'] = level
-
-    @SmtpMsgDecorator.log("模板配置")
-    def _template_settings(self, log_container):
-        msg = level = None
-        try:
-            # 保存自定义模板
-            if self._save or self._reset:
-                if self._save is True:
-                    self.custom_template.write_text(self._content, encoding="utf-8")
-                    self._save = False
-                    self.__update_config()
-                    if self._reset is True:
-                        self._reset = False
-                        self.__update_config()
-                        msg = f"自定义模板与恢复默认模板不可同时启动，关闭恢复默认模板按钮！自定义邮件模板保存成功！"
-                    else:
-                        msg = "自定义邮件模板保存成功！"
-                    self.systemmessage.put(msg)
-                elif self._save is not True and self._reset is True:
-                    shutil.copy(self.default_template, self.custom_template)
-                    self._content = self.custom_template.read_text(encoding="utf-8")
-                    self._reset = False
-                    self.__update_config()
-                    msg = "默认邮件模板恢复成功！"
-                if msg:
-                    self.systemmessage.put(msg)
-                    level = 1
-                    return msg
-            else:
-                level = 1
-                msg = "写入自定义模板与恢复默认模板功能未启用"
-        except Exception as e:
-            level = -1
-            msg = f"模板配置运行失败 - 原因 - {e}"
-            raise Exception(msg)
-
-        finally:
-            log_container['msg'] = msg
-            log_container['level'] = level
-
-    def _run_plugin(self):
-        """
-        启用插件
-        """
-        # 参数配置不完整，关闭插件
-        if self._main is False and self._secondary is False:
-            self._enabled = False
-            self._test = False
-            self.__update_config()
-            msg = "当前参数配置不完整，主服务器与备用服务器至少需要启用一个，关闭插件"
-            logger.warning(msg)
-            self.systemmessage.put(f"{self.plugin_name}插件{msg}")
-            return
-        else:
-            if self._test:
-                msg = self.master_program()
-                self._test = False
-                self.__update_config()
-                self.systemmessage.put(msg)
 
     def get_state(self) -> bool:
         return self._enabled
@@ -392,7 +351,7 @@ class SmtpMsg(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 3,
+                                    'md': 6,
                                 },
                                 'content': [
                                     {
@@ -401,24 +360,6 @@ class SmtpMsg(_PluginBase):
                                             'model': 'test',
                                             'label': '发送测试邮件',
                                             'hint': '发送测试邮件，检查配置是否正确',
-                                            'persistent-hint': True,
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 3,
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VSwitch',
-                                        'props': {
-                                            'model': 'log_more',
-                                            'label': '记录更多日志',
-                                            'hint': '细分日志细节，方便排查问题',
                                             'persistent-hint': True,
                                         }
                                     }
@@ -437,9 +378,11 @@ class SmtpMsg(_PluginBase):
                                             'model': 'server_timeout',
                                             'label': '超时时间（秒）',
                                             'placeholder': '10',
-                                            'clearable': True,
                                             'hint': '连接时的超时时间，默认10秒',
                                             'persistent-hint': True,
+                                            # 'suffix': '秒',
+                                            'clearable': True,
+                                            'type': 'number',
                                         }
                                     }
                                 ]
@@ -504,6 +447,18 @@ class SmtpMsg(_PluginBase):
                                     },
                                 },
                                 'text': '自定义邮件模板'
+                            },
+                            {
+                                'component': 'VTab',
+                                'props': {
+                                    'value': 'log_setting',
+                                    'style': {
+                                        'padding-top': '10px',
+                                        'padding-bottom': '10px',
+                                        'font-size': '16px'
+                                    },
+                                },
+                                'text': '日志设置'
                             },
                             # Todo: 未完成，暂时不显示
                             # {
@@ -626,6 +581,7 @@ class SmtpMsg(_PluginBase):
                                                                     'hint': '服务器地址的端口号：1~65535',
                                                                     'persistent-hint': True,
                                                                     'maxlength': 5,
+                                                                    'type': 'number',
                                                                 }
                                                             }
                                                         ]
@@ -803,7 +759,7 @@ class SmtpMsg(_PluginBase):
                                                             'hint': '服务器地址的端口号：1~65535',
                                                             'persistent-hint': True,
                                                             'maxlength': 5,
-
+                                                            'type': 'number',
                                                         }
                                                     }
                                                 ]
@@ -920,15 +876,33 @@ class SmtpMsg(_PluginBase):
                                                 'component': 'VCol',
                                                 'props': {
                                                     'cols': 12,
-                                                    'md': 6
+                                                    'md': 3
                                                 },
                                                 'content': [
                                                     {
                                                         'component': 'VSwitch',
                                                         'props': {
                                                             'model': 'enabled_proxy_image',
-                                                            'label': '代理获取图片',
+                                                            'label': '全局代理获取图片',
                                                             'hint': '使用代理服务器获取图片数据',
+                                                            'persistent-hint': True,
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 3
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VSwitch',
+                                                        'props': {
+                                                            'model': 'enabled_github_proxy_image',
+                                                            'label': 'Github加速站代理',
+                                                            'hint': '用Github加速站获取图片数据',
                                                             'persistent-hint': True,
                                                         }
                                                     }
@@ -950,6 +924,42 @@ class SmtpMsg(_PluginBase):
                                                             'clearable': True,
                                                             'hint': '获取图片的超时时间，默认10秒',
                                                             'persistent-hint': True,
+                                                            'type': 'number',
+                                                            # 'suffix': '秒',
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                        ]
+                                    },
+                                    {
+                                        'component': 'VRow',
+                                        'props': {
+                                            'align': 'center'
+                                        },
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 12,
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VAlert',
+                                                        'props': {
+                                                            'type': 'warning',
+                                                            'variant': 'tonal',
+                                                            'text': '同时启用全局与Github加速站时，'
+                                                                    'Github官方域名的URL会优先使用加速站获取，'
+                                                                    '失败时自动使用全局代理再次获取。\n'
+                                                                    '\n'
+                                                                    'Github加速站代理功能，只代理Github官方的域名的URL，'
+                                                                    '此功能依赖于 "GITHUB_PROXY" 变量。\n'
+                                                                    '\n'
+                                                                    '非Github官方域名的URL，不使用Github加速站代理，'
+                                                                    '而是直接使用全局代理，此功能依赖于 "PROXY_HOST" 变量。',
+                                                            'style': 'white-space: pre-line;'
                                                         }
                                                     }
                                                 ]
@@ -1231,13 +1241,138 @@ class SmtpMsg(_PluginBase):
                                                         'props': {
                                                             'type': 'info',
                                                             'variant': 'tonal',
-                                                            'text': "支持的变量："
-                                                                    "类型：{msg_type}、用户ID：{userid}、标题：{title}、"
-                                                                    "内容：{text}、图片：cid:image"
+                                                            'style': 'white-space: pre-line;',
+                                                            'text': '支持的变量：'
+                                                                    '类型：{msg_type}、用户ID：{userid}、标题：{title}、'
+                                                                    '内容：{text}、图片：cid:image\n'
+                                                                    '\n'
+                                                                    '电脑端可用 "ctrl" + "/" '
+                                                                    '快捷键来快速打开/关闭需要注释的内容。'
                                                         }
                                                     }
                                                 ]
                                             }
+                                        ]
+                                    },
+                                ]
+                            },
+                            {
+                                'component': 'VWindowItem',
+                                'props': {
+                                    'value': 'log_setting',
+                                    'style': {
+                                        'padding-top': '20px',
+                                        'padding-bottom': '20px'
+                                    },
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VRow',
+                                        'props': {
+                                            'align': 'center'
+                                        },
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 3,
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VSwitch',
+                                                        'props': {
+                                                            'model': 'log_more',
+                                                            'label': '记录更多日志',
+                                                            'hint': '记录细节，排查问题',
+                                                            'persistent-hint': True,
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                        ]
+                                    },
+                                    {
+                                        'component': 'VRow',
+                                        'props': {
+                                            'align': 'center'
+                                        },
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 3,
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VSwitch',
+                                                        'props': {
+                                                            'model': 'clean_all_log',
+                                                            'label': '立刻清空所有日志',
+                                                            'hint': '一次性任务，运行后自动关闭',
+                                                            'persistent-hint': True,
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 3,
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VSwitch',
+                                                        'props': {
+                                                            'model': 'onlyonce_clean',
+                                                            'label': '立刻整理日志',
+                                                            'hint': '一次性任务，依赖于日志记录最大数量',
+                                                            'persistent-hint': True,
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 3,
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VSwitch',
+                                                        'props': {
+                                                            'model': 'enabled_max_lines',
+                                                            'label': '启用最大记录数量',
+                                                            'hint': '激活日志记录最大数量',
+                                                            'persistent-hint': True,
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 3,
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VTextField',
+                                                        'props': {
+                                                            'model': 'max_lines',
+                                                            'label': '日志记录最大数量',
+                                                            'placeholder': '不能低于等于0',
+                                                            'hint': '保存的最近的记录的最大数量',
+                                                            'persistent-hint': True,
+                                                            'type': 'number',
+                                                            'clearable': True,
+                                                        }
+                                                    }
+                                                ]
+                                            },
                                         ]
                                     },
                                     {
@@ -1257,8 +1392,15 @@ class SmtpMsg(_PluginBase):
                                                         'props': {
                                                             'type': 'info',
                                                             'variant': 'tonal',
-                                                            'text': '电脑端可用 "ctrl" + "/" '
-                                                                    '快捷键来快速打开/关闭需要注释的内容'
+                                                            'text': '启用最大记录数量后，每次发送任务结束，不管是否发送成功，'
+                                                                    '都将进行整理，该功能处理方式为删除文件内记录！\n'
+                                                                    "\n"
+                                                                    '清空所有日志记录功能不需要依赖于启用最大记录数量。\n'
+                                                                    '\n'
+                                                                    '同时启用立刻清空所有日志与立刻整理日志时，'
+                                                                    '优先运行立刻整理日志，且自动关闭清空所有日志开关，'
+                                                                    '避免误操作！',
+                                                            'style': 'white-space: pre-line;',
                                                         }
                                                     }
                                                 ]
@@ -1571,7 +1713,7 @@ class SmtpMsg(_PluginBase):
         ], {
             'enabled': False,
             'test': False,
-            'log_more': False,
+
             'server_timeout': 10,
 
             'main': True,
@@ -1590,6 +1732,7 @@ class SmtpMsg(_PluginBase):
 
             'enabled_image_send': False,
             'enabled_proxy_image': True,
+            'enabled_github_proxy_image': True,
             'image_timeout': 10,
             'sender_name': "",
             'receiver_mail': "",
@@ -1603,16 +1746,172 @@ class SmtpMsg(_PluginBase):
 
             'enabled_msg_rules': False,
             'enabled_customizable_msg_rules': False,
+
+            'log_more': False,
+            'clean_all_log': False,
+            'onlyonce_clean': False,
+            'enabled_scheduled_clean': False,
+            'cron': '0 0 7 * * ',
+            'rows': 100,
         }
 
     def get_page(self) -> List[dict]:
+        pass
+
+    def get_service(self) -> List[Dict[str, Any]]:
+        """
+        注册插件公共服务
+        [{
+            "id": "服务ID",
+            "name": "服务名称",
+            "trigger": "触发器：cron/interval/date/CronTrigger.from_crontab()",
+            "func": self.xxx,
+            "kwargs": {} # 定时器参数
+        }]
+        """
         pass
 
     def stop_service(self):
         """
         退出插件
         """
-        pass
+        try:
+            if self._scheduler:
+                self._scheduler.remove_all_jobs()
+                if self._scheduler.running:
+                    self._event.set()
+                    self._scheduler.shutdown(wait=False)
+                    self._event.clear()
+                self._scheduler = None
+        except Exception as e:
+            logger.info(str(e))
+
+    # init
+
+    def _onlyonce_clean_logs(self):
+        """
+        一次性清理日志
+        """
+        if self._onlyonce_clean:
+            if int(self._max_lines) >= 1:
+                self._clean_log()
+            else:
+                self.systemmessage.put("最大记录数量不能小于等于0，清理日志失败！")
+            self._onlyonce_clean = False
+            self._clean_all_log = False
+            self.__update_config()
+
+        elif self._clean_all_log:
+            try:
+                with open(self.log_path, 'w', encoding='utf-8') as file:
+                    file.truncate(0)
+            except Exception as e:
+                self.systemmessage(f"清空日志失败 - 原因 - {e}")
+            self._clean_all_log = False
+            self.__update_config()
+
+    def _check_path(self):
+        """
+        检查路径与文件
+        """
+        self.__check_template_file()
+
+    @SmtpMsgDecorator.log("文件检查")
+    def __check_template_file(self, log_container):
+        msg = level = None
+        try:
+            # 自定义模板不存在，创建模板文件
+            if not self.custom_template.exists():
+                self.custom_template_dir.mkdir(parents=True, exist_ok=True)
+                self.custom_template.touch()
+                # 如果_content不为空，写入自定义模板
+                if self._content:
+                    self.custom_template.write_text(self._content, encoding="utf-8")
+                    msg = "自定义邮件模板文件不存在，已创建模板文件，已将数据库内配置写入文件"
+                # 否则，复制默认模板到自定义模板
+                else:
+                    self.default_template.replace(self.custom_template)
+                    msg = "自定义邮件模板文件不存在，已创建模板文件，数据库内没有该项配置，还原使用默认配置"
+
+            # 自定义模板存在
+            elif self.custom_template.exists():
+                # 内容是否一致
+                if (self._save is not True
+                        and self._reset is not True
+                        and self._content != self.custom_template.read_text(encoding="utf-8")):
+                    self._content = self.custom_template.read_text(encoding="utf-8")
+                    self.__update_config()
+                    msg = "自定义邮件模板文件已存在，但与数据库内缓存不一致，提取文件配置并覆盖数据库配置"
+                else:
+                    msg = '自定义邮件模板文件已存在'
+                level = 1
+        except Exception as e:
+            level = -1
+            raise Exception(f'未知错误 - 原因 - {e}')
+        finally:
+            log_container['msg'] = msg
+            log_container['level'] = level
+
+    @SmtpMsgDecorator.log("模板配置")
+    def _template_settings(self, log_container):
+        msg = level = None
+        try:
+            # 保存自定义模板
+            if self._save or self._reset:
+                if self._save is True:
+                    self.custom_template.write_text(self._content, encoding="utf-8")
+                    self._save = False
+                    self.__update_config()
+                    if self._reset is True:
+                        self._reset = False
+                        self.__update_config()
+                        msg = f"自定义模板与恢复默认模板不可同时启动，关闭恢复默认模板按钮！自定义邮件模板保存成功！"
+                    else:
+                        msg = "自定义邮件模板保存成功！"
+                    self.systemmessage.put(msg)
+                elif self._save is not True and self._reset is True:
+                    shutil.copy(self.default_template, self.custom_template)
+                    self._content = self.custom_template.read_text(encoding="utf-8")
+                    self._reset = False
+                    self.__update_config()
+                    msg = "默认邮件模板恢复成功！"
+                if msg:
+                    self.systemmessage.put(msg)
+                    level = 1
+                    return msg
+            else:
+                level = 1
+                msg = "写入自定义模板与恢复默认模板功能未启用"
+        except Exception as e:
+            level = -1
+            msg = f"模板配置运行失败 - 原因 - {e}"
+            raise Exception(msg)
+
+        finally:
+            log_container['msg'] = msg
+            log_container['level'] = level
+
+    def _run_plugin(self):
+        """
+        启用插件
+        """
+        # 参数配置不完整，关闭插件
+        if self._main is False and self._secondary is False:
+            self._enabled = False
+            self._test = False
+            self.__update_config()
+            msg = "当前参数配置不完整，主服务器与备用服务器至少需要启用一个，关闭插件"
+            logger.warning(msg)
+            self.systemmessage.put(f"{self.plugin_name}插件{msg}")
+            return
+        else:
+            if self._test:
+                msg = self.master_program()
+                self._test = False
+                self.__update_config()
+                self.systemmessage.put(msg)
+
+    # task
 
     @eventmanager.register(EventType.NoticeMessage)
     def send(self, event: Event):
@@ -1646,7 +1945,7 @@ class SmtpMsg(_PluginBase):
         """
         运行主要逻辑
         """
-        with lock:
+        with SmtpMsgLock:
             # todo: 消息过滤，待完善
             # self.__msg_filter(title=title, text=text, msg_type=msg_type, userid=userid)
 
@@ -1668,46 +1967,6 @@ class SmtpMsg(_PluginBase):
             # 打印结果
             msg = self._generate_result_log(m_success, s_success)
             return msg
-
-    # Todo：读取json格式配置辅助消息过滤功能的实现
-    @SmtpMsgDecorator.log("读取过滤规则")
-    def __read_json_filter(self):
-        pass
-
-    # Todo：消息过滤功能的实现
-    @SmtpMsgDecorator.log("消息过滤")
-    def __msg_filter(self, title, text, msg_type, userid):
-        pass
-
-    @SmtpMsgDecorator.log("服务器调用判断")
-    def _determine_server(self, smtp_value, success, log_container):
-        msg = level = None
-        try:
-            if smtp_value == 0:
-                server_type = "主"
-            elif smtp_value == 1:
-                server_type = "备用"
-            else:
-                raise Exception("未知的SMTP服务器类型")
-            if self._test and smtp_value == 1:
-                status = self._secondary
-            else:
-                if success:
-                    status = False
-                else:
-                    status = True
-            result = "开始调用" if status else "不需要调用"
-            success = status
-            msg = f'{server_type}服务器调用判断 - {result}'
-            level = 1
-            return success, server_type
-        except Exception as e:
-            level = -1
-            msg = f'判断失败 - 原因 - {e}'
-            raise Exception(msg)
-        finally:
-            log_container['msg'] = msg
-            log_container['level'] = level
 
     @SmtpMsgDecorator.log("邮件发送")
     def _send_to_smtp(self, smtp_value, log_container, server_type,
@@ -1755,6 +2014,132 @@ class SmtpMsg(_PluginBase):
             log_container['msg'] = msg
             log_container['level'] = level
 
+    # filter
+
+    # Todo：读取json格式配置辅助消息过滤功能的实现
+    @SmtpMsgDecorator.log("读取过滤规则")
+    def __read_json_filter(self):
+        pass
+
+    # Todo：消息过滤功能的实现
+    @SmtpMsgDecorator.log("消息过滤")
+    def __msg_filter(self, title, text, msg_type, userid):
+        pass
+
+    # smtp_server
+
+    @SmtpMsgDecorator.log("服务器调用判断")
+    def _determine_server(self, smtp_value, success, log_container):
+        msg = level = None
+        try:
+            if smtp_value == 0:
+                server_type = "主"
+            elif smtp_value == 1:
+                server_type = "备用"
+            else:
+                raise Exception("未知的SMTP服务器类型")
+            if self._test and smtp_value == 1:
+                status = self._secondary
+            else:
+                if success:
+                    status = False
+                else:
+                    status = True
+            result = "开始调用" if status else "不需要调用"
+            success = status
+            msg = f'{server_type}服务器调用判断 - {result}'
+            level = 1
+            return success, server_type
+        except Exception as e:
+            level = -1
+            msg = f'判断失败 - 原因 - {e}'
+            raise Exception(msg)
+        finally:
+            log_container['msg'] = msg
+            log_container['level'] = level
+
+    @SmtpMsgDecorator.log("服务器连接")
+    def _connect_to_smtp_server(self, log_container):
+        msg = level = server_timeout = None
+        try:
+            try:
+                try:
+                    if self._server_timeout:
+                        if float(self._server_timeout) > 0:
+                            server_timeout = float(self._server_timeout)
+                    else:
+                        server_timeout = float(10)
+                except (ValueError, TypeError):
+                    server_timeout = float(10)
+
+                if self._encryption == "ssl":
+                    server = smtplib.SMTP_SSL(self._host, self._port, timeout=server_timeout)
+                else:
+                    server = smtplib.SMTP(self._host, self._port, timeout=server_timeout)
+                    if self._encryption == "tls":
+                        server.starttls()
+
+                server.ehlo(self._host)
+                server.login(self._sender_mail, self._password)
+                msg = "地址连接成功"
+                level = 1
+                return server
+            except socket.timeout as e:
+                raise Exception(f'建立连接超时 - {e}')
+            except socket.gaierror as e:
+                raise Exception(f'无法解析主机名或 IP 地址 - {e}')
+            except smtplib.SMTPConnectError as e:
+                raise Exception(f'无法建立连接 - {e}')
+            except smtplib.SMTPAuthenticationError as e:
+                raise Exception(f'登录失败，用户名或密码错误 - {e}')
+            except smtplib.SMTPResponseException as e:
+                raise Exception(f'返回异常状态码: {e.smtp_code}')
+            except smtplib.SMTPServerDisconnected as e:
+                raise Exception(f'连接已断开 - {e}')
+            except smtplib.SMTPNotSupportedError as e:
+                raise Exception(f'不支持所需的身份验证方法 - {e}')
+            except (smtplib.SMTPException, Exception) as e:
+                raise Exception(f'登录或者连接时出现未知异常 - {e}')
+        except Exception as e:
+            level = -1
+            raise Exception(e)
+
+        finally:
+            log_container['msg'] = msg
+            log_container['level'] = level
+
+    @SmtpMsgDecorator.log("邮件发送")
+    def _send_msg_to_smtp(self, server, message, sender_mail, receiver_list, server_type, log_container):
+        test_type = "测试" if self._test else ""
+        msg = level = None
+        try:
+            try:
+                server.sendmail(sender_mail, receiver_list, message.as_string())
+            except socket.timeout as e:
+                raise Exception(f"连接超时 - {e}")
+            except (smtplib.SMTPRecipientsRefused, smtplib.SMTPSenderRefused) as e:
+                raise Exception(f"拒绝了接受或发送者地址 - {e}")
+            except smtplib.SMTPDataError as e:
+                raise Exception(f"拒绝了接受邮件数据，返回了错误响应 - {e}")
+            except (smtplib.SMTPServerDisconnected, ConnectionError) as e:
+                raise Exception(f"断开了连接 - {e}")
+            except smtplib.SMTPAuthenticationError as e:
+                raise Exception(f"身份验证失败 - {e}")
+            except smtplib.SMTPNotSupportedError as e:
+                raise Exception(f"不支持某些功能 - {e}")
+            except smtplib.SMTPException as e:
+                raise Exception(f"出现了未知原因 - {e}")
+            msg = f"使用{server_type} SMTP 服务器发送{test_type}邮件成功"
+            level = 1
+            return True
+        except Exception as e:
+            msg = f"使用{server_type} SMTP 服务器发送{test_type}邮件失败 - 原因 - {e}"
+            level = -1
+            raise Exception(msg)
+        finally:
+            log_container['msg'] = msg
+            log_container['level'] = level
+
     @SmtpMsgDecorator.log("关闭连接")
     def _quit_server(self, server, log_container):
         """
@@ -1774,6 +2159,8 @@ class SmtpMsg(_PluginBase):
         finally:
             log_container['msg'] = msg
             log_container['level'] = level
+
+    # setting
 
     @SmtpMsgDecorator.log("消息参数校验")
     def _msg_parameter_validation(self, log_container, server_type, msg_type=None, title=None, text=None, image=None,
@@ -1882,6 +2269,21 @@ class SmtpMsg(_PluginBase):
         except Exception as e:
             raise Exception(e)
 
+    # message
+
+    def _msg_build_email(self, title, text, image, userid, msg_type, sender_name, sender_mail, message=None):
+        """
+        构建邮件
+        """
+        if not message:
+            message = MIMEMultipart()
+            msg_html = self.__msg_build_read_email_template(text=text, image=image, title=title, userid=userid,
+                                                            msg_type=msg_type)
+            message = self.__msg_build_email_Header(message, title, sender_name, sender_mail)
+            message = self.__msg_build_email_body(message, image, msg_html)
+        if message:
+            return message
+
     @SmtpMsgDecorator.log("邮件头参数提取")
     def _get_receiver_and_sender(self, log_container):
         """
@@ -1915,69 +2317,6 @@ class SmtpMsg(_PluginBase):
         finally:
             log_container['msg'] = msg
             log_container['level'] = level
-
-    @SmtpMsgDecorator.log("服务器连接")
-    def _connect_to_smtp_server(self, log_container):
-        msg = level = server_timeout = None
-        try:
-            try:
-                try:
-                    if self._server_timeout:
-                        if float(self._server_timeout) > 0:
-                            server_timeout = float(self._server_timeout)
-                    else:
-                        server_timeout = float(10)
-                except (ValueError, TypeError):
-                    server_timeout = float(10)
-
-                if self._encryption == "ssl":
-                    server = smtplib.SMTP_SSL(self._host, self._port, timeout=server_timeout)
-                else:
-                    server = smtplib.SMTP(self._host, self._port, timeout=server_timeout)
-                    if self._encryption == "tls":
-                        server.starttls()
-
-                server.ehlo(self._host)
-                server.login(self._sender_mail, self._password)
-                msg = "地址连接成功"
-                level = 1
-                return server
-            except socket.timeout as e:
-                raise Exception(f'建立连接超时 - {e}')
-            except socket.gaierror as e:
-                raise Exception(f'无法解析主机名或 IP 地址 - {e}')
-            except smtplib.SMTPConnectError as e:
-                raise Exception(f'无法建立连接 - {e}')
-            except smtplib.SMTPAuthenticationError as e:
-                raise Exception(f'登录失败，用户名或密码错误 - {e}')
-            except smtplib.SMTPResponseException as e:
-                raise Exception(f'返回异常状态码: {e.smtp_code}')
-            except smtplib.SMTPServerDisconnected as e:
-                raise Exception(f'连接已断开 - {e}')
-            except smtplib.SMTPNotSupportedError as e:
-                raise Exception(f'不支持所需的身份验证方法 - {e}')
-            except (smtplib.SMTPException, Exception) as e:
-                raise Exception(f'登录或者连接时出现未知异常 - {e}')
-        except Exception as e:
-            level = -1
-            raise Exception(e)
-
-        finally:
-            log_container['msg'] = msg
-            log_container['level'] = level
-
-    def _msg_build_email(self, title, text, image, userid, msg_type, sender_name, sender_mail, message=None):
-        """
-        构建邮件
-        """
-        if not message:
-            message = MIMEMultipart()
-            msg_html = self.__msg_build_read_email_template(text=text, image=image, title=title, userid=userid,
-                                                            msg_type=msg_type)
-            message = self.__msg_build_email_Header(message, title, sender_name, sender_mail)
-            message = self.__msg_build_email_body(message, image, msg_html)
-        if message:
-            return message
 
     @SmtpMsgDecorator.log("模板导入")
     def __msg_build_read_email_template(self, text, image, title, userid, msg_type, log_container):
@@ -2089,9 +2428,11 @@ class SmtpMsg(_PluginBase):
                             with open(image, 'rb') as image_file:
                                 image_data = image_file.read()
                         else:
+                            image_url = new_proxies = response = None
                             parsed_url = urllib.parse.urlparse(image)
                             if parsed_url.scheme in set(urllib.parse.uses_netloc):
                                 proxies = settings.PROXY if self._enabled_proxy_image else None
+                                github_proxy = settings.GITHUB_PROXY if self._enabled_github_proxy_image else None
                                 try:
                                     if self._image_timeout:
                                         if float(self._image_timeout) > 0:
@@ -2100,11 +2441,38 @@ class SmtpMsg(_PluginBase):
                                         image_timeout = float(10)
                                 except (TypeError, ValueError):
                                     image_timeout = float(10)
-                                response = requests.get(image, proxies=proxies, timeout=image_timeout)
-                                if response.status_code == 200:
-                                    image_data = response.content
-                                else:
-                                    raise Exception(f"获取图片失败。状态码：{response.status_code}")
+                                domain = parsed_url.netloc
+                                domains = ['github.com', 'githubapp.com',  'githubengineering.com', 'githubstatus.com',
+                                           'github.blog', 'githubusercontent.com', 'github.dev', 'githubtraining.com',
+                                           'github.io', 'githubcloud.com', 'githubpages.com']
+                                for github_domain in domains:
+                                    if domain == github_domain or domain.endswith('.' + github_domain):
+                                        image_url = urllib.parse.urljoin(github_proxy, image)
+                                        new_proxies = None
+                                    else:
+                                        image_url = image
+                                        new_proxies = proxies
+                                try:
+                                    response = requests.get(url=image_url, proxies=new_proxies, timeout=image_timeout)
+                                    if response.status_code == 200:
+                                        image_data = response.content
+                                    else:
+                                        raise Exception(f"状态码：{response.status_code}")
+                                except Exception as e:
+                                    if proxies is not None:
+                                        try:
+                                            response = requests.get(url=image, proxies=proxies, timeout=image_timeout)
+                                            if response.status_code == 200:
+                                                image_data = response.content
+                                            else:
+                                                raise Exception(f"状态码：{response.status_code}")
+                                        except Exception as e:
+                                            raise Exception(f'获取图片都失败 - 原因 - {e}')
+                                    else:
+                                        raise Exception(f'获取图片都失败 - 原因 - {e}')
+                                finally:
+                                    if response:
+                                        response.close()
                     except requests.exceptions.RequestException as e:
                         raise Exception(f"请求图片失败 - {e}")
                     except TypeError as e:
@@ -2117,7 +2485,6 @@ class SmtpMsg(_PluginBase):
                         raise Exception(f"提供了一个目录地址，不是图片文件 - {e}")
                     except Exception as e:
                         raise Exception(e)
-
                     if image_data:
                         image_mime = MIMEImage(image_data)
                         image_mime.add_header('Content-ID', '<image>')
@@ -2125,7 +2492,6 @@ class SmtpMsg(_PluginBase):
                         msg = '图片文件嵌入成功'
                     else:
                         raise Exception("无法获取图像数据")
-
                 except Exception as e:
                     level = 2
                     msg = f'出现错误，跳过嵌入 - 原因 - {e}'
@@ -2139,38 +2505,9 @@ class SmtpMsg(_PluginBase):
         log_container['level'] = level
         return image_mime
 
-    @SmtpMsgDecorator.log("邮件发送")
-    def _send_msg_to_smtp(self, server, message, sender_mail, receiver_list, server_type, log_container):
-        test_type = "测试" if self._test else ""
-        msg = level = None
-        try:
-            try:
-                server.sendmail(sender_mail, receiver_list, message.as_string())
-            except socket.timeout as e:
-                raise Exception(f"连接超时 - {e}")
-            except (smtplib.SMTPRecipientsRefused, smtplib.SMTPSenderRefused) as e:
-                raise Exception(f"拒绝了接受或发送者地址 - {e}")
-            except smtplib.SMTPDataError as e:
-                raise Exception(f"拒绝了接受邮件数据，返回了错误响应 - {e}")
-            except (smtplib.SMTPServerDisconnected, ConnectionError) as e:
-                raise Exception(f"断开了连接 - {e}")
-            except smtplib.SMTPAuthenticationError as e:
-                raise Exception(f"身份验证失败 - {e}")
-            except smtplib.SMTPNotSupportedError as e:
-                raise Exception(f"不支持某些功能 - {e}")
-            except smtplib.SMTPException as e:
-                raise Exception(f"出现了未知原因 - {e}")
-            msg = f"使用{server_type} SMTP 服务器发送{test_type}邮件成功"
-            level = 1
-            return True
-        except Exception as e:
-            msg = f"使用{server_type} SMTP 服务器发送{test_type}邮件失败 - 原因 - {e}"
-            level = -1
-            raise Exception(msg)
-        finally:
-            log_container['msg'] = msg
-            log_container['level'] = level
+    # log
 
+    @SmtpMsgDecorator.clean_log()
     @SmtpMsgDecorator.log("结果汇报")
     def _generate_result_log(self, m_success, s_success, log_container):
         s_msg = m_msg = msg = level = None
@@ -2204,3 +2541,11 @@ class SmtpMsg(_PluginBase):
         finally:
             log_container['msg'] = msg
             log_container['level'] = level
+
+    @staticmethod
+    @SmtpMsgDecorator.clean_log()
+    def _clean_log():
+        """
+        清理日志
+        """
+        return
