@@ -26,7 +26,7 @@ class MqttClient(_PluginBase):
     # 插件图标
     plugin_icon = "Ha_A.png"
     # 插件版本
-    plugin_version = "0.1"
+    plugin_version = "0.2"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -349,7 +349,7 @@ class MqttClient(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '以上三项，仅用于显示客户端启动后，动态获取的每次保存后生成的动态属性，如有需要自行复制。\n'
+                                            'text': '以上三项，仅用于显示每次保存后，客户端成功启动时的动态参数具体值；如有需要使用，自行复制即可。\n'
                                                     '\n'
                                                     '注意：消息发布者与消息订阅者，至少需要启用一项。两项都未启用时，会关闭插件开关，避免性能占用。',
                                             'style': 'white-space: pre-line;',
@@ -738,8 +738,8 @@ class MqttClient(_PluginBase):
                                                         'component': 'VSwitch',
                                                         'props': {
                                                             'model': 'publisher_msgtypes_cn_enabled',
-                                                            'label': '中文消息类型名称',
-                                                            'hint': '使用中文消息类型作，不启用则用英文',
+                                                            'label': '启用中文版消息类型名称',
+                                                            'hint': '启用则使用中文，不启用则用英文',
                                                             'persistent-hint': True,
                                                         }
                                                     }
@@ -756,11 +756,12 @@ class MqttClient(_PluginBase):
                                                         'component': 'VTextField',
                                                         'props': {
                                                             'model': 'publisher_topic',
-                                                            'label': '主题名',
+                                                            'label': '主题名（一级分类）',
                                                             'placeholder': 'MoviePilot',
                                                             'clearable': True,
-                                                            'hint': '选填；缺省时，默认使用接受消息类型作为主题名',
+                                                            'hint': '选填；作为订阅时的一级分类等级',
                                                             'persistent-hint': True,
+                                                            'active': True,
                                                         }
                                                     }
                                                 ]
@@ -784,6 +785,7 @@ class MqttClient(_PluginBase):
                                                             ],
                                                             'hint': '必须项；消息的质量等级',
                                                             'persistent-hint': True,
+                                                            'active': True,
                                                         }
                                                     }
                                                 ]
@@ -809,11 +811,12 @@ class MqttClient(_PluginBase):
                                                             'multiple': True,
                                                             'chips': True,
                                                             'model': 'publisher_msgtypes',
-                                                            'label': '消息类型',
+                                                            'label': '消息类型（二级分类）',
                                                             'items': MsgTypeOptions,
                                                             'clearable': True,
-                                                            'hint': '自定义需要接受并发布的消息类型',
+                                                            'hint': '自定义需要接受并发布的消息类型，作为二级分类使用',
                                                             'persistent-hint': True,
+                                                            'active': True,
                                                         }
                                                     }
                                                 ]
@@ -838,9 +841,10 @@ class MqttClient(_PluginBase):
                                                         'props': {
                                                             'type': 'info',
                                                             'variant': 'tonal',
-                                                            'text': '订阅方式：不启动中文模式时，主题名/消息类型，如 "MoviePilot/Plugin" ，主题名留空，则填写消息类型即可。\n'
-                                                                    '斜杠 / 为自动生成，如果没有主题名，订阅时则不需要 / 。\n'
-                                                                    '注意：每个消息类型都视为单独的订阅，应写成 ”MoviePilot/插件消息" "MoviePilot/手动订阅通知" 多个订阅。\n',
+                                                            'text': '订阅方式：主题名（一级分类）/消息类型（二级分类）\n'
+                                                                    '不启动中文模式时，消息订阅："MoviePilot/Plugin"；启动中文模式时，消息订阅："MoviePilot/插件通知"。\n'
+                                                                    '"主题名（一级分类）"留空时，根据"中文消息类型名称"状态，填写对应的消息类型即可：如 "插件通知"、"Plugin"。\n'
+                                                                    '注意：每个消息类型都视为单独的订阅渠道，如 ”MoviePilot/插件消息"、"MoviePilot/手动订阅通知" 。\n',
                                                             'style': 'white-space: pre-line;',
                                                         }
                                                     }
@@ -869,7 +873,7 @@ class MqttClient(_PluginBase):
                                                             'text': '消息质量（Qos）等级说明：\n'
                                                                     'Qos 0 ：消息发布不会等待消息订阅者的确认。消息可能会丢失，但不会进行重传。\n'
                                                                     'Qos 1 ：消息发布如果没有收到确认回调，会一直重传，直到接收到消息订阅者的确认回调。在高频重传时，可能会收到多条内容一样的消息的问题。\n'
-                                                                    'Qos 2 ：在 "Qos 1" 的基础上，增加消息发布者会二次确认机制，确保消息订阅者只会收到一次消息，避免接受重复消息。',
+                                                                    'Qos 2 ：在 "Qos 1" 的基础上，会在消息订阅者上增加二次确认机制，确保消息订阅者只会收到一次消息，避免接受重复消息。',
                                                             'style': 'white-space: pre-line;',
                                                         }
                                                     }
@@ -972,6 +976,7 @@ class MqttClient(_PluginBase):
                                                             'persistent-hint': True,
                                                             'type': 'number',
                                                             'clearable': True,
+                                                            'active': True,
                                                         }
                                                     }
                                                 ]
@@ -995,8 +1000,8 @@ class MqttClient(_PluginBase):
                                                         'props': {
                                                             'type': 'info',
                                                             'variant': 'tonal',
-                                                            'text': '启用最大记录数量后，每次发送任务结束，不管是否发送成功，'
-                                                                    '都将进行整理，该功能处理方式为删除文件内记录！\n'
+                                                            'text': '启用最大记录数量后，每次任务运行结束时，不管是否运行成功，'
+                                                                    '都将进行一次整理；该功能处理方式为直接删除文件内记录！\n'
                                                                     "\n"
                                                                     '清空所有日志记录功能不需要依赖于启用最大记录数量。\n'
                                                                     '\n'

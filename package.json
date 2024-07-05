@@ -53,12 +53,13 @@
     "MqttClient": {
         "name": "MQTT消息交互（测试版）",
         "description": "可接入HomeAssistant，支持使用智能家居设备，汇报状态信息。",
-        "version": "0.1",
+        "version": "0.2",
         "labels": "消息通知",
         "icon": "Ha_A.png",
         "author": "Aqr-K",
         "level": 1,
         "history": {
+          "v0.2": "优化：部分错误文案，部分ui的聚焦显示。",
           "v0.1": "增加：支持使用MQTT协议发送消息通知。"
         }
     }
