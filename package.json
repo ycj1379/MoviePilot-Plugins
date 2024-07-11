@@ -62,5 +62,17 @@
           "v0.2": "优化：部分错误文案，部分ui的聚焦显示。",
           "v0.1": "增加：支持使用MQTT协议发送消息通知。"
         }
+    },
+    "CloudHelperPlus": {
+        "name": "云盘拓展功能",
+        "description": "拓展官方内置支持的云盘的部分功能，功能开放api接口。",
+        "version": "1.0",
+        "labels": "云盘",
+        "icon": "Alidrive_A.png",
+        "author": "Aqr-K",
+        "level": 2,
+        "history": {
+          "v1.0": "增加：拓展官方内置支持的云盘的部分功能，功能开放api接口。"
+        }
     }
 }
