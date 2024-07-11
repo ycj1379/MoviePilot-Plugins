@@ -20,7 +20,7 @@ class CloudHelperPlus(_PluginBase):
     # 插件图标
     plugin_icon = "Alidrive_A.png"
     # 插件版本
-    plugin_version = "1.0"
+    plugin_version = "1.1"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -107,6 +107,8 @@ class CloudHelperPlus(_PluginBase):
                                         'props': {
                                             'model': 'aliyun_connect_clear_enabled',
                                             'label': '清除阿里云盘认证缓存',
+                                            'hint': '清除阿里云盘认证缓存，主动断开连接',
+                                            'persistent-hint': True,
                                         }
                                     }
                                 ]
@@ -123,10 +125,44 @@ class CloudHelperPlus(_PluginBase):
                                         'props': {
                                             'model': 'u115_connect_clear_enabled',
                                             'label': '清除115网盘认证缓存',
+                                            'hint': '清除阿里云盘认证缓存，主动断开连接',
+                                            'persistent-hint': True,
                                         }
                                     }
                                 ]
                             },
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'props': {
+                            'align': 'center',
+                        },
+                        'content': [
+                            {
+                                'component': 'VAlert',
+                                'props': {
+                                    'type': 'warning',
+                                    'variant': 'tonal',
+                                    'text': '注意：阿里云盘有设备认证上限限制，清除认证不会清除上限，记得自行去除过期的设备记录!'
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'props': {
+                            'align': 'center',
+                        },
+                        'content': [
+                            {
+                                'component': 'VAlert',
+                                'props': {
+                                    'type': 'info',
+                                    'variant': 'tonal',
+                                    'text': '清除认证缓存后，请刷新网页缓存，再选择指定网盘。'
+                                }
+                            }
                         ]
                     },
                 ]
