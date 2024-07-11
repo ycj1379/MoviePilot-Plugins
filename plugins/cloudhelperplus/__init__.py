@@ -16,11 +16,11 @@ class CloudHelperPlus(_PluginBase):
     # 插件名称
     plugin_name = "云盘拓展功能"
     # 插件描述
-    plugin_desc = "拓展官方内置支持的云盘的部分功能，功能开放api接口。"
+    plugin_desc = "拓展官方内置支持的云盘的部分功能，功能开放API接口。"
     # 插件图标
     plugin_icon = "Alidrive_A.png"
     # 插件版本
-    plugin_version = "1.2"
+    plugin_version = "1.2-1"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -125,7 +125,7 @@ class CloudHelperPlus(_PluginBase):
                                         'props': {
                                             'model': 'u115_connect_clear_enabled',
                                             'label': '清除115网盘认证缓存',
-                                            'hint': '清除阿里云盘认证缓存，主动断开连接',
+                                            'hint': '清除115网盘认证缓存，主动断开连接',
                                             'persistent-hint': True,
                                         }
                                     }
@@ -174,7 +174,7 @@ class CloudHelperPlus(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '清除认证缓存后，请刷新网页缓存，再选择指定网盘。'
+                                            'text': '清除认证缓存后，请刷新网页，再选择指定网盘；浏览器有显示缓存，不刷新网页时，会导致无法重新刷新二维码。'
                                         }
                                     }
                                 ]
