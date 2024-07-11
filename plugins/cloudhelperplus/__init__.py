@@ -20,7 +20,7 @@ class CloudHelperPlus(_PluginBase):
     # 插件图标
     plugin_icon = "Alidrive_A.png"
     # 插件版本
-    plugin_version = "1.1"
+    plugin_version = "1.2"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -62,7 +62,7 @@ class CloudHelperPlus(_PluginBase):
         self.update_config(config)
 
     def get_state(self) -> bool:
-        return False
+        return True
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
@@ -140,12 +140,20 @@ class CloudHelperPlus(_PluginBase):
                         },
                         'content': [
                             {
-                                'component': 'VAlert',
+                                'component': 'VCol',
                                 'props': {
-                                    'type': 'warning',
-                                    'variant': 'tonal',
-                                    'text': '注意：阿里云盘有设备认证上限限制，清除认证不会清除上限，记得自行去除过期的设备记录!'
-                                }
+                                    'cols': 12,
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'warning',
+                                            'variant': 'tonal',
+                                            'text': '注意：阿里云盘有设备认证上限限制，清除认证不会清除上限，记得自行去除过期的设备记录!'
+                                        }
+                                    }
+                                ]
                             }
                         ]
                     },
@@ -156,12 +164,20 @@ class CloudHelperPlus(_PluginBase):
                         },
                         'content': [
                             {
-                                'component': 'VAlert',
+                                'component': 'VCol',
                                 'props': {
-                                    'type': 'info',
-                                    'variant': 'tonal',
-                                    'text': '清除认证缓存后，请刷新网页缓存，再选择指定网盘。'
-                                }
+                                    'cols': 12,
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'info',
+                                            'variant': 'tonal',
+                                            'text': '清除认证缓存后，请刷新网页缓存，再选择指定网盘。'
+                                        }
+                                    }
+                                ]
                             }
                         ]
                     },
