@@ -20,7 +20,7 @@ class CloudHelperPlus(_PluginBase):
     # 插件图标
     plugin_icon = "Alidrive_A.png"
     # 插件版本
-    plugin_version = "1.2-1"
+    plugin_version = "1.3"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -174,7 +174,9 @@ class CloudHelperPlus(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '清除认证缓存后，请刷新网页，再选择指定网盘；浏览器有显示缓存，不刷新网页时，会导致无法重新刷新二维码。'
+                                            'style': 'white-space: pre-line;',
+                                            'text': '清除认证缓存后，请刷新网页，再选择指定网盘；浏览器有显示缓存，不刷新网页时，会导致无法重新刷新二维码。\n'
+                                                    '需要使用API接口功能，请在安装插件后，重启MoviePilot项目；未重启时，无法注册API接口服务。'
                                         }
                                     }
                                 ]
