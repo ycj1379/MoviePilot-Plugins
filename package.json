@@ -83,7 +83,7 @@
         "name": "用户管理拓展功能",
         "description": "支持快速添加新的超级管理员；支持管理用户权限等级、用户密码、用户状态、用户邮箱。",
         "version": "1.0",
-        "labels": "系统工具",
+        "labels": "系统设置,工具",
         "icon": "Admin_A.png",
         "author": "Aqr-K",
         "level": 1,
