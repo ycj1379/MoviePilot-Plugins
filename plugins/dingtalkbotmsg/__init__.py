@@ -17,9 +17,9 @@ class DingTalkBotMsg(_PluginBase):
     # 插件描述
     plugin_desc = "支持使用钉钉群聊机器人发送消息通知。"
     # 插件图标
-    plugin_icon = "https://raw.githubusercontent.com/Aqr-K/MoviePilot-Plugins/main/icons/dongjiqiang.png"
+    plugin_icon = "https://raw.githubusercontent.com/Aqr-K/MoviePilot-Plugins/main/icons/dingtalk.png"
     # 插件版本
-    plugin_version = "1.4"
+    plugin_version = "1.5"
     # 插件作者
     plugin_author = "Aqr-k"
     # 作者主页
