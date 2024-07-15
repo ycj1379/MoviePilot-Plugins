@@ -19,7 +19,7 @@ class DingTalkBotMsg(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/Aqr-K/MoviePilot-Plugins/main/icons/dongjiqiang.png"
     # 插件版本
-    plugin_version = "1.3"
+    plugin_version = "1.4"
     # 插件作者
     plugin_author = "Aqr-k"
     # 作者主页
@@ -207,7 +207,7 @@ class DingTalkBotMsg(_PluginBase):
                                             'type': 'info',
                                             'variant': 'tonal',
                                             'style': 'white-space: pre-line;',
-                                            'content': '请提前到"钉钉"群聊中，创建机器人，并获取 Webhook 地址。'
+                                            'text': '请提前到"钉钉"群聊中，创建机器人，并获取 Webhook 地址。'
                                         }
                                     }
                                 ]

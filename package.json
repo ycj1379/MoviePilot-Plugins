@@ -94,12 +94,13 @@
     "DingTalkBotMsg": {
         "name": "钉钉机器人消息推送",
         "description": "支持使用钉钉群聊机器人发送消息通知。",
-        "version": "1.3",
+        "version": "1.4",
         "labels": "消息通知",
         "icon": "https://raw.githubusercontent.com/Aqr-K/MoviePilot-Plugins/main/icons/dongjiqiang.png",
         "author": "Aqr-K",
         "level": 1,
         "history": {
+            "V1.4": "修复：文案显示bug。",
             "v1.3": "增加：图片发送开关；允许快捷清除配置。优化：UI界面选项描述。",
             "v1.2": "增加：从支持使用钉钉群聊机器人发送消息通知。"
           }
