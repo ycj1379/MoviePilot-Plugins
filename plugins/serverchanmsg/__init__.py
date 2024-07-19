@@ -1,5 +1,10 @@
+import hashlib
+from base64 import b64encode
 from typing import Any, List, Dict, Tuple
 from urllib.parse import urlencode
+
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
 
 from app.core.event import eventmanager, Event
 from app.log import logger
@@ -20,7 +25,7 @@ class ServerChanMsg(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/Aqr-K/MoviePilot-Plugins/main/icons/ServerChan.png"
     # 插件版本
-    plugin_version = "1.0"
+    plugin_version = "1.1"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -33,9 +38,13 @@ class ServerChanMsg(_PluginBase):
     auth_level = 1
 
     # 私有属性
-    _onlyonce = False
-
     _enabled = False
+    _onlyonce = False
+    _encode_enabled = False
+    _send_image_enabled = False
+
+    _userid = None
+    _encryption_key = None
     _serverchan_key = None
     _msgtypes = []
 
@@ -46,11 +55,18 @@ class ServerChanMsg(_PluginBase):
         if config:
             self._enabled = config.get("enabled")
             self._onlyonce = config.get("onlyonce")
-            self._msgtypes = config.get("msgtypes") or []
+            self._encode_enabled = config.get("encode_enabled")
+            self._send_image_enabled = config.get("send_image_enabled")
+
+            self._userid = config.get("userid")
+            self._encryption_key = config.get("encryption_key")
             self._serverchan_key = config.get("serverchan_key")
+            self._msgtypes = config.get("msgtypes") or []
 
         if self._onlyonce:
-            flag = self.send_msg(title="Server酱消息通知测试", text="Server酱消息通知测试成功！")
+            flag = self.send_msg(title="Server酱消息通知测试",
+                                 text="Server酱消息通知测试成功！",
+                                 image="https://the7.ft07.com/sct/images/logo.png")
             if flag:
                 self.systemmessage.put("Server酱消息通知测试成功！")
             self._onlyonce = False
@@ -64,9 +80,14 @@ class ServerChanMsg(_PluginBase):
         """
         config = {
             "enabled": self._enabled,
-            "msgtypes": self._msgtypes,
+            "onlyonce": self._onlyonce,
+            "encode_enabled": self._encode_enabled,
+            "send_image_enabled": self._send_image_enabled,
+
+            "userid": self._userid,
+            "encryption_key": self._encryption_key,
             "serverchan_key": self._serverchan_key,
-            "onlyonce": self._onlyonce
+            "msgtypes": self._msgtypes,
         }
         self.update_config(config)
 
@@ -102,7 +123,7 @@ class ServerChanMsg(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 6
+                                    'md': 4,
                                 },
                                 'content': [
                                     {
@@ -120,21 +141,147 @@ class ServerChanMsg(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 6
+                                    'md': 4,
                                 },
                                 'content': [
                                     {
                                         'component': 'VSwitch',
                                         'props': {
                                             'model': 'onlyonce',
-                                            'label': '测试消息',
-                                            'hint': '一次性任务，允运行后自动关闭',
+                                            'label': '立刻发送测试',
+                                            'hint': '一次性任务，运行后自动关闭',
+                                            'persistent-hint': True,
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 4,
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'send_image_enabled',
+                                            'label': '发送图片',
+                                            'hint': '可选；关闭时，不发送图片',
                                             'persistent-hint': True,
                                         }
                                     }
                                 ]
                             }
-
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'info',
+                                            'variant': 'tonal',
+                                            'style': 'white-space: pre-line;',
+                                            'text': '图片消息发送的内容为图片的URL地址，如果图片URL在接收端存在污染或者屏蔽，会导致图片无法显示的问题。'
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 4,
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'encode_enabled',
+                                            'label': '启用端对端加密模式',
+                                            'hint': '可选；需要配合用户UID与解密密钥使用',
+                                            'persistent-hint': True,
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 4,
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'userid',
+                                            'label': '端对端 - 用户UID',
+                                            'placeholder': '123456',
+                                            'hint': '可选；作为启用端对端加密时的加密参数',
+                                            'persistent-hint': True,
+                                            'clearable': True,
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 4,
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'encryption_key',
+                                            'label': '端对端 - 解密密钥',
+                                            'placeholder': '123456789',
+                                            'hint': '可选；接收客户端用于解密的密钥',
+                                            'persistent-hint': True,
+                                            'clearable': True,
+                                        }
+                                    }
+                                ]
+                            },
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'warning',
+                                            'variant': 'tonal',
+                                            'style': 'white-space: pre-line;',
+                                            'text': '"端对端加密模式"一般用于只将ServerChan作为跳板时使用；需要"接收端"使用自定义的"端对端 -解密密钥"进行解密操作后，才可正常查看消息内容。（一般配合App、机器人、网站使用）\n'
+                                                    '如果您是只使用"Server酱"公众号，作为消息接收端，并进行通知查看的用户，请勿启动"端对端加密模式"，否则将无法正常查看消息内容。\n'
+                                                    '"端对端 - 用户UID"为官方提供的UID。\n'
+                                        }
+                                    }
+                                ]
+                            }
                         ]
                     },
                     {
@@ -151,9 +298,9 @@ class ServerChanMsg(_PluginBase):
                                         'component': 'VTextField',
                                         'props': {
                                             'model': 'serverchan_key',
-                                            'label': '密钥',
+                                            'label': 'ServerChan 密钥',
                                             'placeholder': 'token: xxxxxxxxxxxxxx',
-                                            'hint': 'ServerChan密钥',
+                                            'hint': '必填；ServerChan的SendKey密钥或AppKey',
                                             'persistent-hint': True,
                                             'clearable': True,
                                         }
@@ -193,8 +340,13 @@ class ServerChanMsg(_PluginBase):
         ], {
             "enabled": False,
             "onlyonce": False,
+            "encode_enabled": False,
+            "send_image_enabled": False,
+
+            "userid": "",
+            'encryption_key': '',
+            "serverchan_key": "",
             'msgtypes': [],
-            'serverchan_key': '',
         }
 
     def get_page(self) -> List[dict]:
@@ -222,6 +374,8 @@ class ServerChanMsg(_PluginBase):
         title = msg_body.get("title")
         # 文本
         text = msg_body.get("text")
+        # 图片
+        image = msg_body.get("image")
 
         if not title and not text:
             logger.warn("标题和内容不能同时为空")
@@ -231,27 +385,41 @@ class ServerChanMsg(_PluginBase):
                 and msg_type.name not in self._msgtypes):
             logger.info(f"消息类型 {msg_type.value} 未开启消息发送")
             return
-        self.send_msg(title=title, text=text)
 
-    def send_msg(self, title, text):
+        self.send_msg(title=title, text=text, image=image)
+
+    def send_msg(self, title, text, image=None):
         """
         发送消息
-        :param title:
-        :param text:
-        :return:
         """
         with lock:
             try:
                 if not self._serverchan_key:
                     raise Exception("未添加ServerChan密钥")
 
-                serverchan_url = "https://sctapi.ftqq.com/%s.send?%s" % (self._serverchan_key,
-                                                                         urlencode(
-                                                                             {"title": title,
-                                                                              "desp": text}
-                                                                         ))
+                url = f"https://sctapi.ftqq.com/{self._serverchan_key}.send"
 
-                res = RequestUtils().get_res(serverchan_url)
+                if self._send_image_enabled and image:
+                    content = text + '\n ![image](' + image + ')'
+                else:
+                    content = text
+
+                if self._encode_enabled:
+                    encrypted_content = self.__encode(content)
+                    data = {
+                        "title": title,
+                        "desp": encrypted_content,
+                        "encoded": 1,
+                    }
+
+                else:
+                    data = {
+                        "text": title,
+                        "desp": content,
+                    }
+
+                res = RequestUtils().post_res(url=url, data=data)
+
                 if res:
                     ret_json = res.json()
                     errno = ret_json.get('code')
@@ -266,8 +434,31 @@ class ServerChanMsg(_PluginBase):
                     raise Exception(f"ServerChan消息发送失败：未获取到返回信息")
                 return True
             except Exception as msg_e:
-                logger.error(f"ServerChan消息发送失败：{str(msg_e)}")
+                logger.error(f"ServerChan消息发送失败 - {str(msg_e)}")
                 return False
+
+    def __encode(self, text):
+        """
+        端对端加密
+        """
+        try:
+            if not self._userid:
+                raise Exception("未添加用户UID，无法开启端对端加密")
+            if not self._encryption_key:
+                raise Exception("未添加端对端加密密钥，无法开启端对端加密")
+
+            key = hashlib.md5(self._serverchan_key.encode()).hexdigest()[:16]
+            iv = hashlib.md5(("SCT" + self._encryption_key).encode()).hexdigest()[:16]
+
+            content = b64encode(text.encode())
+
+            cipher = AES.new(key.encode(), AES.MODE_CBC, iv.encode())
+            encrypted_content = cipher.encrypt(pad(content, AES.block_size))
+
+            return encrypted_content
+
+        except Exception as e:
+            raise Exception(f"端对端加密失败 - {str(e)}")
 
     def stop_service(self):
         """
