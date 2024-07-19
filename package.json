@@ -92,7 +92,7 @@
         }
     },
     "DingTalkBotMsg": {
-        "name": "钉钉机器人消息推送",
+        "name": "钉钉机器人消息通知",
         "description": "支持使用钉钉群聊机器人发送消息通知。",
         "version": "1.5",
         "labels": "消息通知",
@@ -105,5 +105,17 @@
             "v1.3": "增加：图片发送开关；允许快捷清除配置。优化：UI界面选项描述。",
             "v1.2": "增加：从支持使用钉钉群聊机器人发送消息通知。"
           }
+    },
+    "ServerChanMsg": {
+        "name": "Server酱消息通知",
+        "description": "支持使用Server酱发送消息通知。",
+        "version": "1.0",
+        "labels": "消息通知",
+        "icon": "https://raw.githubusercontent.com/Aqr-K/MoviePilot-Plugins/main/icons/ServerChan.png",
+        "author": "Aqr-K",
+        "level": 1,
+        "history": {
+          "v1.0": "增加：支持使用Server酱发送消息通知。"
+        }
     }
 }
