@@ -6,8 +6,6 @@ from app import schemas
 from app.core.config import settings
 from app.log import logger
 from app.plugins import _PluginBase
-from app.helper.aliyun import AliyunHelper
-from app.helper.u115 import U115Helper
 
 lock = threading.Lock()
 
@@ -20,7 +18,7 @@ class CloudHelperPlus(_PluginBase):
     # 插件图标
     plugin_icon = "Alidrive_A.png"
     # 插件版本
-    plugin_version = "1.3"
+    plugin_version = "1.4"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -39,11 +37,44 @@ class CloudHelperPlus(_PluginBase):
     _scheduler = None
     _event = threading.Event()
 
+    def __init__(self):
+        """
+        初始化
+        """
+        super().__init__()
+        try:
+            # 获取主版本号
+            from version import APP_VERSION
+            version = APP_VERSION
+            self.major_version = int(version.split('.')[0][1:])
+
+            # v1.0版本
+            if self.major_version == 1:
+                from app.helper.aliyun import AliyunHelper as AliyunHelper
+                from app.helper.u115 import U115Helper as U115Helper
+            # v2.0及以上版本
+            elif self.major_version >= 2:
+                from app.modules.filemanager.storage.alipan import AliPan as AliyunHelper
+                from app.modules.filemanager.storage.u115 import U115Pan as U115Helper
+            # 未知版本
+            else:
+                raise ValueError(f"未知版本号 【{version}】 ，无法判断")
+
+            # 导入依赖
+            self.__AliyunHelper = AliyunHelper
+            self.__U115Helper = U115Helper
+
+        except Exception as e:
+            # 初始化失败
+            self.systemmessage.put(f"初始化【{self.plugin_name}】插件失败，插件无法正常使用，请检查日志查看原因！")
+            self._build_log(False, f"无法初始化 【{self.plugin_name}】 插件 - {e}")
+            raise Exception(f"无法初始化【{self.plugin_name}】插件 - {e}")
+
     def init_plugin(self, config: dict = None):
         """
         插件初始化
         """
-        logger.info(f"{self.plugin_name} 插件 初始化")
+        logger.info(f"【{self.plugin_name}】 插件 初始化")
 
         if config:
             self._aliyun_connect_clear_enabled = config.get("aliyun_connect_clear_enabled", False)
@@ -228,33 +259,43 @@ class CloudHelperPlus(_PluginBase):
 
         return api
 
-    @staticmethod
-    def get_cloud_services():
+    def get_cloud_services(self):
         """
         支持的网盘 - 适配后期快速增加
         """
         # 增加新网盘，添加此项配置
-        cloud_services = {
-            'aliyun': ("_aliyun_connect_clear_enabled", AliyunHelper(), "_AliyunHelper__clear_params", "阿里云盘"),
-            'u115': ("_u115_connect_clear_enabled", U115Helper(), "_U115Helper__clear_credential", "115网盘"),
-        }
+        if str(self.major_version) == '2':
+            cloud_services = {
+                'aliyun': ("_aliyun_connect_clear_enabled", self.__AliyunHelper(), "_AliyunHelper__clear_params", "阿里云盘"),
+                'u115': ("_u115_connect_clear_enabled", self.__U115Helper(), "_U115Helper__clear_credential", "115网盘"),
+            }
+        elif str(self.major_version) == '1':
+            cloud_services = {
+                'aliyun': ("_aliyun_connect_clear_enabled", self.__AliyunHelper(), "_AliyunHelper__clear_params", "阿里云盘"),
+                'u115': ("_u115_connect_clear_enabled", self.__U115Helper(), "_U115Helper__clear_credential", "115网盘"),
+            }
+        else:
+            raise Exception(f"未知版本号，判断失败 { f'- 【{self.major_version}】' if {self.major_version} else ''}")
         return cloud_services
 
     def _cloud_connect_clear(self, api_mode: bool = False):
         """
         开始清除
         """
-        cloud_services = self.get_cloud_services()
+        with lock:
+            try:
+                cloud_services = self.get_cloud_services()
+            except Exception as e:
+                self._build_log(False, f"获取云盘服务失败 - {e}")
+                return
 
-        status_dict = {}
-
-        for key, (attr, helper, method, cloud_name) in cloud_services.items():
-            if getattr(self, attr, False):
-                status_dict[key] = self.__connect_clear(helper, method, cloud_name, api_mode)
-                self._build_log(status_dict)
-                # 关闭开关
-                setattr(self, attr, False)
-                self.__update_config()
+            for key, (attr, helper, method, cloud_name) in cloud_services.items():
+                if getattr(self, attr, False):
+                    success, message = self.__connect_clear(helper, method, cloud_name, api_mode)
+                    self._build_log(success, message)
+                    # 关闭开关
+                    setattr(self, attr, False)
+                    self.__update_config()
 
     def _api_connect_clear(self, helper, method_name, cloud_name, api_mode: bool, apikey: str):
         """
@@ -283,15 +324,14 @@ class CloudHelperPlus(_PluginBase):
             success = False
             message = f"{mode_type}{cloud_name}认证缓存清除失败 - {e}"
 
-        return {'success': success, 'message': message}
+        return success, message
 
     @staticmethod
-    def _build_log(status_dict):
+    def _build_log(success, message):
         """
         统一处理结果信息
         """
-        for cloud, status in status_dict.items():
-            if status['success']:
-                logger.info(status['message'])
-            else:
-                logger.error(status['message'])
+        if success:
+            logger.info(message)
+        else:
+            logger.error(message)
