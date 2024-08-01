@@ -1,3 +1,4 @@
+import itertools
 import threading
 from datetime import datetime, timedelta
 from typing import Any, List, Dict, Tuple
@@ -6,6 +7,8 @@ import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.core.config import settings
+from app.db import SessionFactory
+from app.db.models import User
 from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas import NotificationType, MessageChannel
@@ -21,7 +24,7 @@ class SendCustomMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "1.1"
+    plugin_version = "1.2"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -34,7 +37,7 @@ class SendCustomMsg(_PluginBase):
     auth_level = 1
 
     # 私有属性
-    _save = True
+    _save = False
     _only_send_once = False
     _enabled_scheduled_sends_msg = False
     _scheduled_sends_time = None
@@ -45,6 +48,7 @@ class SendCustomMsg(_PluginBase):
     _image = None
     _title = None
     _text = None
+    _link = None
 
     _backup_save = None
     _backup_only_send_once = None
@@ -57,6 +61,7 @@ class SendCustomMsg(_PluginBase):
     _backup_title = None
     _backup_text = None
     _backup_image = None
+    _backup_link = None
 
     _scheduler = None
     _event = threading.Event()
@@ -69,192 +74,15 @@ class SendCustomMsg(_PluginBase):
             self._save = config.get("save", True)
             self._enabled_scheduled_sends_msg = config.get("enabled_scheduled_sends_msg", False)
             self._scheduled_sends_time = config.get("scheduled_sends_time", None)
-            self._channel_type = config.get("channel_type", None)
+            self._channel_type = config.get("channel_type", [])
             self._msg_type = config.get("msg_type", None)
-            self._userid_type = config.get("userid_type", None)
+            self._userid_type = config.get("userid_type", [])
             self._title = config.get("title", None)
             self._text = config.get("text", None)
             self._image = config.get("image", None)
+            self._link = config.get("link", None)
 
-        self.run_plugin()
-
-    def run_plugin(self):
-        """
-        运行插件
-        """
-        status = True
-        if ((self._text is None and self._title is None) or (self._text is None and self._title == "") or
-                (self._text == "" and self._title is None) or (self._text == "" and self._title == "")):
-            if self._scheduler:
-                status = False
-                logger.warning("消息主题和内容都是空的，必须填写其中一项，否则无法发送自定义消息！不更新消息配置！")
-                self.systemmessage.put(
-                    f"消息主题和内容都是空的，必须填写其中一项，否则无法发送自定义消息！不更新消息配置！")
-            else:
-                logger.warning("消息主题和内容都是空的，必须填写其中一项，否则无法发送自定义消息！")
-                self.systemmessage.put(
-                    f"消息主题和内容都是空的，必须填写其中一项，否则无法发送自定义消息！")
-                return
-
-        # 发送自定义消息
-        if self._only_send_once and status:
-            self._send_msg()
-            self._only_send_once = False
-            self.__update_config()
-
-        # 定时发送消息
-        if self._enabled_scheduled_sends_msg:
-            if status:
-                self._scheduled_task()
-        # 关闭定时发送消息
-        else:
-            if self._scheduler:
-                self.stop_service()
-                logger.warning("取消定时发送任务！")
-
-        # 定时，有时间
-        if self._enabled_scheduled_sends_msg and self._scheduled_sends_time:
-            if status:
-                self.__backup_config()
-                self.__update_config()
-                if self._enabled_scheduled_sends_msg and self._save is False:
-                    logger.warning("未启用消息保存，但是定时任务已经启用！自动更新并保存当前的消息配置！")
-                elif self._enabled_scheduled_sends_msg and self._save:
-                    logger.warning("消息配置保存成功！")
-            else:
-                if self._scheduler:
-                    self.__restore_config()
-                    self.__update_config()
-                    msg = "消息主题和内容都是空的，必须填写其中一项，否则无法发送自定义消息！不更新消息配置！"
-                    logger.warning(msg)
-                    self.systemmessage.put(msg)
-        # 保存，未定时
-        elif self._save and self._enabled_scheduled_sends_msg is False:
-            self.__backup_config()
-            self.__update_config()
-            if self._scheduler:
-                self.stop_service()
-            logger.warning("消息配置保存成功！")
-        # 未保存，未定时
-        elif self._save is False and self._enabled_scheduled_sends_msg is False:
-            if self._scheduler:
-                self.stop_service()
-            self.__default_config()
-            self.__update_config()
-            logger.warning("未启用消息保存，丢弃本次所用消息配置！")
-        # 定时，没时间
-        elif self._enabled_scheduled_sends_msg and self._scheduled_sends_time is None:
-            if self._scheduler:
-                self.__restore_config()
-                self.__update_config()
-                msg = f"已存在定时任务，缺少定时时间，抛弃本次消息配置，维持原有消息配置！"
-            else:
-                self.__update_config()
-                msg = f"缺少定时时间，无法启用定时任务！保存已填写配置！"
-            logger.warning(msg)
-            self.systemmessage.put(msg)
-
-    def _scheduled_task(self):
-        """
-        定时任务
-        """
-        if self._scheduled_sends_time:
-            timedata = self.convert_time_format()
-            if timedata:
-                if not self._scheduler:
-                    self._scheduler = BackgroundScheduler(timezone=settings.TZ)
-
-                if len(self._scheduler.get_jobs()):
-                    logger.info(
-                        "已经存在待执行的定时发送任务，清空现有的待执行的定时发送任务，并更新尝试启用新的定时发送任务！")
-                    self._scheduler.remove_all_jobs()
-
-                self._scheduler.add_job(
-                    func=self._send_msg,
-                    kwargs={"scheduler": True},
-                    trigger="date",
-                    run_date=timedata,
-                    name="单次定时发送消息",
-                )
-                logger.info("已添加定时发送任务，等待执行！")
-                if self._scheduler.get_jobs():
-                    self._scheduler.print_jobs()
-                if not self._scheduler.running:
-                    self._scheduler.start()
-            else:
-                msg = "定时发送时间解析失败，无法启用定时任务！"
-                logger.error(msg)
-                self.systemmessage.put(f"{msg}")
-        else:
-            if self._scheduler:
-                msg = "定时发送时间为空，继续运行已存在的定时任务！"
-            else:
-                msg = "定时发送时间为空，无法启用定时任务！"
-            logger.warning(msg)
-            self.systemmessage.put(f"{msg}")
-
-    def convert_time_format(self):
-        """
-        转换时间格式
-        """
-        try:
-            # 解析时间格式，增加微秒
-            send_time = datetime.strptime(self._scheduled_sends_time, "%Y-%m-%dT%H:%M").replace(microsecond=1)
-            # 判断时间是否在当前时间之前
-            if send_time < datetime.now() + timedelta(seconds=3):
-                raise ValueError("输入了一个过期的时间")
-            logger.info(f"定时任务时间大于当前时间，允许添加定时发送任务！")
-            # 转换格式
-            timedata = pytz.timezone(settings.TZ).localize(send_time).isoformat(timespec='microseconds')
-            # 去除日期和时间之间的分隔符
-            timedata = timedata.replace("T", " ")
-        except Exception as e:
-            logger.error(f"时间格式转换失败！ - {e}")
-            timedata = None
-        return timedata
-
-    def _send_msg(self, scheduler=False):
-        """
-        发送自定义消息
-        """
-        log_type = "定时任务" if scheduler else "手动任务"
-        logger.info(f"{log_type} - 开始发送自定义消息")
-        msg = None
-        try:
-            if self._title or self._text:
-                self.post_message(channel=self._channel_type,
-                                  mtype=self._msg_type,
-                                  title=self._title,
-                                  text=self._text,
-                                  image=self._image,
-                                  userid=self._userid_type)
-                msg = f"{log_type} - 自定义消息发送成功！"
-                logger.info(msg)
-            else:
-                msg = f"{log_type} - 主题和内容都是空的，必须填写其中一项，否则无法发送自定义消息！"
-                logger.warning(msg)
-                return True
-        except Exception as e:
-            msg = f"{log_type} - 自定义消息发送失败！"
-            logger.error(f"{msg} - 错误 - {e}")
-            return False
-
-        finally:
-            # 如果是定时任务，发送消息不管是否成功都，关闭定时任务
-            if self._enabled_scheduled_sends_msg and scheduler is True:
-                self._enabled_scheduled_sends_msg = False
-                self.__update_config()
-                self.stop_service()
-                logger.info("定时任务执行完毕，关闭定时任务！")
-                if not self._save:
-                    self.__default_config()
-                    self.__update_config()
-                    logger.info("定时任务执行完毕，清空当前的消息配置！")
-                else:
-                    logger.info("定时任务执行完毕，已启用消息保存功能，保留当前的消息配置！")
-
-            if self._only_send_once and scheduler is False:
-                self.systemmessage.put(f"{msg}")
+        self.run()
 
     def get_state(self):
         return self._enabled_scheduled_sends_msg
@@ -283,13 +111,14 @@ class SendCustomMsg(_PluginBase):
         """
         拼装插件配置页面，需要返回两块数据：1、页面配置；2、数据结构
         """
+        # 消息渠道
         ChannelTypeOptions = []
         for item in MessageChannel:
             ChannelTypeOptions.append({
                 "title": item.value,
                 "value": item.value
             })
-
+        # 消息类型
         MsgTypeOptions = []
         for item in NotificationType:
             MsgTypeOptions.append({
@@ -297,13 +126,25 @@ class SendCustomMsg(_PluginBase):
                 "value": item.value
             })
 
-        # Todo：暂时只支持手动输入用户ID，后续尝试增加支持当前用户列表自动获取
-        # UserTypeOptions = []
-        # for user in users:
-        #     UserTypeOptions.append({
-        #         "title": f"用户名：{user.name} - 用户状态：{user.is_active}",
-        #         "value": user.id
-        #     })
+        UserTypeOptions = []
+
+        users = self.__get_users()
+        for user in users:
+            # 只有激活的用户才能被选中
+            if user.get('active'):
+                UserTypeOptions.append({
+                    "title": f"{'管理员' if user.get('superuser') else '普通用户'} - {user.get('name')}",
+                    "value": user.get('name'),
+                })
+        if UserTypeOptions:
+            UserTypeOptions.insert(0, {
+                "title": "全部普通用户",
+                "value": "all_users",
+            })
+            UserTypeOptions.insert(0, {
+                "title": "全部管理员",
+                "value": "all_admins",
+            })
 
         return [
             {
@@ -434,63 +275,85 @@ class SendCustomMsg(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 12,
                                 },
                                 'content': [
                                     {
-                                        'component': 'VSelect',
+                                        'component': 'VAutocomplete',
                                         'props': {
-                                            'multiple': False,
+                                            'multiple': True,
+                                            'chips': True,
                                             'model': 'channel_type',
                                             'label': '消息渠道',
+                                            'placeholder': '支持可选项多选，不支持手动输入',
                                             'items': ChannelTypeOptions,
                                             'clearable': True,
                                             'hint': '选择消息发送的渠道',
                                             'persistent-hint': True,
+                                            'active': True,
                                         }
                                     }
                                 ]
                             },
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'props': {
+                            'align': 'center'
+                        },
+                        'content': [
                             {
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 12,
                                 },
                                 'content': [
                                     {
-                                        'component': 'VSelect',
+                                        'component': 'VAutocomplete',
                                         'props': {
                                             'multiple': False,
                                             'model': 'msg_type',
                                             'label': '消息类型',
+                                            'placeholder': '只支持可选项单选，不支持手动输入可选项以外参数',
                                             'items': MsgTypeOptions,
                                             "clearable": True,
                                             'hint': '选择消息的类型',
                                             'persistent-hint': True,
+                                            'active': True,
                                         }
                                     }
                                 ]
                             },
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'props': {
+                            'align': 'center'
+                        },
+                        'content': [
                             {
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 12,
                                 },
                                 'content': [
                                     {
-                                        # 'component': 'VSelect',
-                                        'component': 'VTextField',
+                                        'component': 'VCombobox',
                                         'props': {
-                                            'multiple': False,
+                                            'multiple': True,
+                                            'chips': True,
                                             'model': 'userid_type',
                                             'label': '用户ID',
-                                            'placeholder': '该参数将被作为{userid}变量的值。',
-                                            # 'items': UserTypeOptions,
+                                            'placeholder': '支持下拉框多选，支持手动输入多个可选项以外参数，每输入一个参数请回车',
+                                            'items': UserTypeOptions,
                                             "clearable": True,
                                             'hint': '自定义用户ID',
                                             'persistent-hint': True,
+                                            'active': True,
                                         }
                                     }
                                 ]
@@ -519,6 +382,7 @@ class SendCustomMsg(_PluginBase):
                                             'placeholder': '消息主题与文本内容必须填写其中一项，否则无法发送自定义消息！',
                                             'hint': '适配各种类字符，支持换行符',
                                             'persistent-hint': True,
+                                            'active': True,
                                         }
                                     }
                                 ]
@@ -547,6 +411,7 @@ class SendCustomMsg(_PluginBase):
                                             "clearable": True,
                                             'hint': '适配各种类字符，支持换行符',
                                             'persistent-hint': True,
+                                            'active': True,
                                         }
                                     }
                                 ]
@@ -559,59 +424,6 @@ class SendCustomMsg(_PluginBase):
                             'align': 'center'
                         },
                         'content': [
-                            # {
-                            #     'component': 'VCol',
-                            #     'props': {
-                            #         'cols': 12,
-                            #         'md': 2
-                            #     },
-                            #     'content': [
-                            #         {
-                            #             'component': 'VSwitch',
-                            #             'props': {
-                            #                 'model': 'watch_image',
-                            #                 'label': '查看图片',
-                            #             }
-                            #         }
-                            #     ]
-                            # },
-                            # {
-                            #     'component': 'VCol',
-                            #     'props': {
-                            #         'cols': 12,
-                            #         'md': 5
-                            #     },
-                            #     'content': [
-                            #         {
-                            #             'component': 'VFileInput',
-                            #             'props': {
-                            #                 'model': 'image',
-                            #                 'label': '图片',
-                            #                 'show-size': '1024',
-                            #                 'small-chips': True,
-                            #                 'prepend-icon': "mdi-image",
-                            #                 'accept': 'image/png, image/jpeg, image/bmp',
-                            #             },
-                            #         }
-                            #     ]
-                            # },
-                            # {
-                            #     'component': 'VCol',
-                            #     'props': {
-                            #         'cols': 12,
-                            #         'md': 5
-                            #     },
-                            #     'content': [
-                            #         {
-                            #             'component': 'VAlert',
-                            #             'props': {
-                            #                 'type': 'warning',
-                            #                 'variant': 'tonal',
-                            #                 'text': '注意：图片不会被保存，请重新导入！！'
-                            #             }
-                            #         }
-                            #     ]
-                            # }
                             {
                                 'component': 'VCol',
                                 'props': {
@@ -628,6 +440,36 @@ class SendCustomMsg(_PluginBase):
                                             'placeholder': '目前只支持输入图片地址或本地路径；本地上传图片功能需要等项目开发组前端支持。',
                                             'hint': '图片URL地址，如果是服务器的本地图片，请自行确定具体路径。',
                                             'persistent-hint': True,
+                                            'active': True,
+                                        }
+                                    }
+                                ]
+                            },
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'props': {
+                            'align': 'center'
+                        },
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 12
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'link',
+                                            'label': '链接地址',
+                                            'clearable': True,
+                                            'placeholder': 'https://example.com/',
+                                            'hint': 'URL链接地址；一般用于需要跳转功能的消息通知。',
+                                            'persistent-hint': True,
+                                            'active': True,
                                         }
                                     }
                                 ]
@@ -698,6 +540,7 @@ class SendCustomMsg(_PluginBase):
             'title': None,
             'text': None,
             'image': None,
+            'link': None,
         }
 
     def get_page(self) -> List[dict]:
@@ -733,6 +576,7 @@ class SendCustomMsg(_PluginBase):
             'title': self._title,
             'text': self._text,
             'image': self._image,
+            'link': self._link,
 
             'backup_only_send_once': self._backup_only_send_once,
             'backup_save': self._backup_save,
@@ -744,6 +588,7 @@ class SendCustomMsg(_PluginBase):
             'backup_title': self._backup_title,
             'backup_text': self._backup_text,
             'backup_image': self._backup_image,
+            'backup_link': self._backup_link,
 
         }
         self.update_config(config=config)
@@ -762,6 +607,7 @@ class SendCustomMsg(_PluginBase):
         self._title = None
         self._text = None
         self._image = None
+        self._link = None
 
     def __backup_config(self):
         """
@@ -777,6 +623,7 @@ class SendCustomMsg(_PluginBase):
         self._backup_title = self._title
         self._backup_text = self._text
         self._backup_image = self._image
+        self._backup_link = self._link
 
     def __restore_config(self):
         """
@@ -792,3 +639,355 @@ class SendCustomMsg(_PluginBase):
         self._title = self._backup_title
         self._text = self._backup_text
         self._image = self._backup_image
+        self._link = self._backup_link
+
+    # init 初始化
+
+    def run(self):
+        """
+        运行插件
+        """
+        # 保存配置
+        if not self._enabled_scheduled_sends_msg:
+            if self._save:
+                if (not self._text
+                        and not self._title
+                        and not self._image
+                        and not self._link
+                        and not self._msg_type
+                        and not self._channel_type
+                        and not self._userid_type
+                        and not self._scheduled_sends_time
+                        and not self._only_send_once
+                        and not self._enabled_scheduled_sends_msg
+                        and not self._save):
+                    logger.info("插件初始化成功！")
+                else:
+                    self.__backup_config()
+                    logger.info("消息配置保存成功！")
+            else:
+                if (not self._text
+                        and not self._title
+                        and not self._image
+                        and not self._link
+                        and not self._msg_type
+                        and not self._channel_type
+                        and not self._userid_type
+                        and not self._scheduled_sends_time
+                        and not self._only_send_once
+                        and not self._enabled_scheduled_sends_msg
+                        and not self._save):
+                    logger.info("插件初始化成功！")
+                else:
+                    self.__default_config()
+                    logger.warning("消息配置已清空！")
+
+        # 发送自定义消息
+        if self._only_send_once:
+            if self._text or self._title:
+                self._send_msg()
+                self._only_send_once = False
+                self.__update_config()
+            else:
+                msg = "消息主题和内容都是空的，必须填写其中一项，否则无法发送自定义消息！"
+                logger.warning(msg)
+                self.systemmessage.put(msg)
+                self._only_send_once = False
+                self.__update_config()
+
+        else:
+            # 定时发送消息
+            self._handle_scheduled_task()
+
+    # 定时任务
+
+    def _handle_scheduled_task(self):
+        """
+        处理定时任务
+        """
+        # 启动定时任务开关
+        if self._enabled_scheduled_sends_msg:
+            # 有定时时间
+            if self._scheduled_sends_time:
+                # 检查定时器合法性
+                if self.__convert_time_format():
+                    # 配置完整
+                    if self._title or self._text:
+                        self.__handle_existing_scheduler()
+                    else:
+                        self.__handle_incomplete_configuration()
+                else:
+                    self.__handle_invalid_timer()
+            else:
+                self.__handle_missing_timer()
+        else:
+            self.__handle_disabled_scheduler()
+
+    def __handle_existing_scheduler(self):
+        """
+        处理现有定时任务
+        """
+        if self._scheduler:
+            self._scheduler.remove_all_jobs()
+            if self._save:
+                logger.info("定时任务已更新，重新加载定时任务！")
+            else:
+                logger.info("定时任务已更新，未启动保存配置，自动保存本次配置，重新启动定时任务！")
+        else:
+            if self._save:
+                logger.info("配置已保存，定时任务已启动！")
+            else:
+                logger.info("未启动保存配置，自动保存本次配置，定时任务已启动！")
+        self.__backup_config()
+        self.__update_config()
+        self._scheduled_task()
+
+    def __handle_incomplete_configuration(self):
+        """
+        处理配置不完整的情况
+        """
+        if self._scheduler:
+            self.__restore_config()
+            self.__update_config()
+            msg = "消息主题和内容都是空的，必须填写其中一项，否则无法发送自定义消息！抛弃本次配置，恢复原配置，继续运行已存在的定时任务！"
+        else:
+            if self._save:
+                msg = "消息主题和内容都是空的，必须填写其中一项，否则无法发送自定义消息！保存已填写配置！"
+            else:
+                msg = "消息主题和内容都是空的，必须填写其中一项，否则无法发送自定义消息！未启动保存配置，抛弃本次消息配置！"
+                self.__default_config()
+            self._enabled_scheduled_sends_msg = False
+            self.__update_config()
+        logger.warning(msg)
+        self.systemmessage.put(msg)
+
+    def __handle_invalid_timer(self):
+        """
+        处理定时器不合法的情况
+        """
+        if self._scheduler:
+            self.__restore_config()
+            self.__update_config()
+            msg = "定时发送时间解析失败，无法更新定时任务！抛弃本次配置，恢复原配置！继续运行已存在的定时任务！"
+        else:
+            if self._save:
+                msg = "定时发送时间解析失败，无法启用定时任务！保存已填写配置！"
+            else:
+                msg = "定时发送时间解析失败，无法启用定时任务！未启动保存配置，抛弃本次消息配置！"
+                self.__default_config()
+            self._enabled_scheduled_sends_msg = False
+            self.__update_config()
+        logger.warning(msg)
+        self.systemmessage.put(msg)
+
+    def __handle_missing_timer(self):
+        """
+        处理缺少定时时间的情况
+        """
+        if self._scheduler:
+            self.__restore_config()
+            self.__update_config()
+            msg = "已存在定时任务，当前配置缺少定时时间，抛弃本次消息配置，维持原有消息配置！"
+        else:
+            if self._save:
+                msg = "缺少定时时间，无法启用定时任务！保存已填写配置！"
+            else:
+                msg = "缺少定时时间，无法启用定时任务！未启动保存配置，抛弃本次消息配置！"
+                self.__default_config()
+            self._enabled_scheduled_sends_msg = False
+            self.__update_config()
+        logger.warning(msg)
+        self.systemmessage.put(msg)
+
+    def __handle_disabled_scheduler(self):
+        """
+        处理没有启动定时任务开关的情况
+        """
+        if self._scheduler:
+            self.stop_service()
+            logger.warning("取消定时发送任务！")
+
+    def _scheduled_task(self):
+        """
+        定时任务
+        """
+
+        if self._scheduled_sends_time:
+            # 转换时间格式
+            timedata = self.__convert_time_format()
+
+            if timedata:
+                # 启动定时任务
+                if not self._scheduler:
+                    self._scheduler = BackgroundScheduler(timezone=settings.TZ)
+                # 清空已存在的定时任务
+                if len(self._scheduler.get_jobs()):
+                    logger.info(
+                        "已经存在待执行的定时发送任务，清空现有的待执行的定时发送任务，并更新尝试启用新的定时发送任务！")
+                    self._scheduler.remove_all_jobs()
+
+                self._scheduler.add_job(
+                    func=self._send_msg,
+                    kwargs={"scheduler": True},
+                    trigger="date",
+                    run_date=timedata,
+                    name="单次定时发送消息",
+                )
+                logger.info("已添加定时发送任务，等待执行！")
+                if self._scheduler.get_jobs():
+                    self._scheduler.print_jobs()
+                if not self._scheduler.running:
+                    self._scheduler.start()
+            else:
+                msg = "定时发送时间解析失败，无法启用定时任务！"
+                logger.error(msg)
+                self.systemmessage.put(f"{msg}")
+        else:
+            if self._scheduler:
+                msg = "定时发送时间为空，继续运行已存在的定时任务！"
+            else:
+                msg = "定时发送时间为空，无法启用定时任务！"
+            logger.warning(msg)
+            self.systemmessage.put(f"{msg}")
+
+    def __convert_time_format(self):
+        """
+        转换时间格式
+        """
+        try:
+            # 解析时间格式，增加微秒
+            send_time = datetime.strptime(self._scheduled_sends_time, "%Y-%m-%dT%H:%M").replace(microsecond=1)
+            # 判断时间是否在当前时间之前
+            if send_time < datetime.now() + timedelta(seconds=3):
+                raise ValueError("输入了一个过期的时间")
+            logger.info(f"定时任务时间大于当前时间，允许添加定时发送任务！")
+            # 转换格式
+            timedata = pytz.timezone(settings.TZ).localize(send_time).isoformat(timespec='microseconds')
+            # 去除日期和时间之间的分隔符
+            timedata = timedata.replace("T", " ")
+        except Exception as e:
+            logger.error(f"时间格式转换失败 - {e}")
+            timedata = None
+        return timedata
+
+    # 发送消息
+
+    def _send_msg(self, scheduler=False):
+        """
+        发送自定义消息
+        """
+        log_type = "定时任务" if scheduler else "手动任务"
+        logger.info(f"{log_type} - 开始发送自定义消息")
+        msg = None
+        try:
+            if self._title or self._text:
+                channel_type = self._get_values(self._channel_type)
+                userid_type = self._get_values(self._userid_type, user_mode=True)
+
+                if not channel_type and userid_type:
+                    channels = [None]  # 没有渠道
+                    users = userid_type
+                elif channel_type and not userid_type:
+                    channels = channel_type
+                    users = [None]  # 没有用户
+                elif channel_type and userid_type:
+                    channels = channel_type
+                    users = userid_type
+                else:
+                    channels = [None]
+                    users = [None]
+                for channel, userid in itertools.product(channels, users):
+                    self.post_message(channel=channel,
+                                      mtype=self._msg_type,
+                                      title=self._title,
+                                      text=self._text,
+                                      image=self._image,
+                                      userid=userid,
+                                      link=self._link)
+                    continue
+
+                msg = f"{log_type} - 自定义消息发送成功！"
+                logger.info(msg)
+            else:
+                msg = f"{log_type} - 主题和内容都是空的，必须填写其中一项，否则无法发送自定义消息！"
+                logger.warning(msg)
+                return True
+        except Exception as e:
+            msg = f"{log_type} - 自定义消息发送失败！"
+            logger.error(f"{msg} - 错误 - {e}")
+            return False
+
+        finally:
+            # 如果是定时任务，发送消息不管是否成功都，关闭定时任务
+            if self._enabled_scheduled_sends_msg and scheduler is True:
+                self._enabled_scheduled_sends_msg = False
+                self.__update_config()
+                self.stop_service()
+                logger.info("定时任务执行完毕，关闭定时任务！")
+                if not self._save:
+                    self.__default_config()
+                    self.__update_config()
+                    logger.info("定时任务执行完毕，清空当前的消息配置！")
+                else:
+                    logger.info("定时任务执行完毕，已启用消息保存功能，保留当前的消息配置！")
+
+            if self._only_send_once and scheduler is False:
+                self.systemmessage.put(f"{msg}")
+
+    # 数据处理
+
+    @staticmethod
+    def _get_values(list_type: list, user_mode=False) -> list:
+        """
+        数据处理
+        """
+        values = []
+        values_set = set()
+
+        if not list_type:
+            return values
+
+        for item in list_type:
+            if isinstance(item, dict) and 'value' in item:
+                value = item['value']
+            else:
+                value = item
+
+            if value not in {"all_users", "all_admins"}:
+                if value not in values_set:
+                    values.append(value)
+                    values_set.add(value)
+
+            # 用户模式专用
+            if user_mode:
+                # 只在用户模式下处理 "all_users" 和 "all_admins"
+                if value == "all_users":
+                    # 获取全部普通用户
+                    user_names = [user.get('name') for user in SendCustomMsg.__get_users() if not user.get('superuser')]
+                    unique_users = [name for name in user_names if name not in values_set]
+                    values.extend(unique_users)
+                    values_set.update(unique_users)
+                elif value == "all_admins":
+                    # 获取全部管理员
+                    user_names = [user.get('name') for user in SendCustomMsg.__get_users() if user.get('superuser')]
+                    unique_users = [name for name in user_names if name not in values_set]
+                    values.extend(unique_users)
+                    values_set.update(unique_users)
+        return values
+
+    @staticmethod
+    def __get_users():
+        """
+        获取用户列表
+        """
+        with SessionFactory() as db:
+            users = db.query(User).all()
+            user_list = [
+                {
+                    'name': user.name,
+                    'active': user.is_active,
+                    'superuser': user.is_superuser
+                }
+                for user in users
+            ]
+            return user_list
