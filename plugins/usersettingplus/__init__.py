@@ -16,7 +16,7 @@ class UserSettingPlus(_PluginBase):
     # 插件图标
     plugin_icon = "setting.png"
     # 插件版本
-    plugin_version = "1.0"
+    plugin_version = "1.1"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -48,7 +48,7 @@ class UserSettingPlus(_PluginBase):
             self._is_active = config.get("is_active", True)
 
         if self._enabled:
-            self.run_plugin()
+            self.run()
 
         self.__default_config()
         self.__update_config()
@@ -105,6 +105,15 @@ class UserSettingPlus(_PluginBase):
         """
         拼装插件配置页面，需要返回两块数据：1、页面配置；2、数据结构
         """
+        UserTypeOptions = []
+
+        users = self.__get_users()
+        for user in users:
+            UserTypeOptions.append({
+                 "title": f"{'管理员' if user.get('superuser') else '普通用户'} - {user.get('name')} - {'启用' if user.get('active') else '冻结'}",
+                 "value": user.get('name'),
+            })
+
         return [
             {
                 'component': 'VForm',
@@ -167,12 +176,14 @@ class UserSettingPlus(_PluginBase):
                                 },
                                 'content': [
                                     {
-                                        'component': 'VTextField',
+                                        'component': 'VCombobox',
                                         'props': {
                                             'model': 'name',
                                             'label': '用户名',
                                             'placeholder': 'admin',
-                                            'hint': '必选项；登录时使用的用户名',
+                                            'multiple': False,
+                                            'items': UserTypeOptions,
+                                            'hint': '必选项；登录时使用的用户名，支持手动输入与下拉框快速选择两种方式',
                                             'persistent-hint': True,
                                             'clearable': True,
                                             'active': True,
@@ -306,6 +317,7 @@ class UserSettingPlus(_PluginBase):
                                                     '8、插件修改与创建用户时，不会影响已有的用户的 ”双重认证“、"头像" 等功能；新用户如需使用这些功能，请在创建后，自行登录设置！\n'
                                                     '9、插件只提供创建与修改用户功能，如需删除用户，请到 "设定" 页面进行操作！\n'
                                                     '10、插件不会在日志里打印设置后的用户密码，请保存设置前，自行确定密码准确性！\n'
+                                                    '11、用户名选项的下拉框可快速选择已有用户，名称虽显示为 "权限-用户名-状态组成"，但后台调用值仍为用户名；手动输入功能保持不变，请放心使用！\n'
                                         }
                                     }
                                 ]
@@ -333,22 +345,22 @@ class UserSettingPlus(_PluginBase):
         """
         pass
 
-    def __check_user_exists(self, db):
+    def __check_user_exists(self, db, name):
         """
         检查用户是否存在
 
         :param db: 数据库连接
         """
         try:
-            if not self._name:
+            if not name:
                 err = "用户名不能为空，请填写用户名！"
                 self.systemmessage.put(err)
                 raise ValueError(err)
-            user = User.get_by_name(db=db, name=self._name)
+            user = User.get_by_name(db=db, name=name)
             if user:
-                logger.info(f"用户 【 {self._name} 】 已存在，将更新此用户信息！")
+                logger.info(f"用户 【 {name} 】 已存在，将更新此用户信息！")
                 return True
-            logger.info(f"用户 【 {self._name} 】 不存在，将创建此用户！")
+            logger.info(f"用户 【 {name} 】 不存在，将创建此用户！")
             return False
         except Exception as e:
             raise Exception(f"无法判断当前用户名是否已存在 - {e}")
@@ -668,14 +680,16 @@ class UserSettingPlus(_PluginBase):
         except Exception as e:
             raise Exception(e)
 
-    def run_plugin(self):
+    def run(self):
         """
         启动
         """
         try:
             with SessionFactory() as db:
+                # 提取用户名
+                name = self._get_value(self._name)
                 # 查看用户是否存在
-                flag = self.__check_user_exists(db=db)
+                flag = self.__check_user_exists(db=db, name=name)
                 # 验证配置并获取字典
                 user_info = self._get_user_info(db=db, flag=flag)
                 # 创建/更新用户
@@ -702,3 +716,26 @@ class UserSettingPlus(_PluginBase):
             self.systemmessage.put("处理用户配置失败！")
             logger.error(f"处理用户配置失败 - {e}")
             return False
+
+    @staticmethod
+    def __get_users():
+        """
+        获取用户列表
+        """
+        with SessionFactory() as db:
+            users = db.query(User).all()
+            user_list = [
+                {
+                    'name': user.name,
+                    'active': user.is_active,
+                    'superuser': user.is_superuser
+                }
+                for user in users
+            ]
+            return user_list
+
+    @staticmethod
+    def _get_value(value):
+        if isinstance(value, dict) and 'value' in value:
+            return value.get('value', None)
+        return value
