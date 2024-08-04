@@ -881,8 +881,8 @@ class SendCustomMsg(_PluginBase):
         msg = None
         try:
             if self._title or self._text:
-                channel_type = self._get_values(self._channel_type)
-                userid_type = self._get_values(self._userid_type, user_mode=True)
+                channel_type = self._get_values(data=self._channel_type)
+                userid_type = self._get_values(data=self._userid_type, user_mode=True)
 
                 if not channel_type and userid_type:
                     channels = [None]  # 没有渠道
@@ -937,17 +937,17 @@ class SendCustomMsg(_PluginBase):
     # 数据处理
 
     @staticmethod
-    def _get_values(list_type: list, user_mode=False) -> list:
+    def _get_values(data: list, user_mode=False) -> list:
         """
         数据处理
         """
         values = []
         values_set = set()
 
-        if not list_type:
+        if not data:
             return values
 
-        for item in list_type:
+        for item in data:
             if isinstance(item, dict) and 'value' in item:
                 value = item['value']
             else:
