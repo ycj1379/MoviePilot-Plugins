@@ -16,7 +16,7 @@ class UserSettingPlus(_PluginBase):
     # 插件图标
     plugin_icon = "setting.png"
     # 插件版本
-    plugin_version = "1.2"
+    plugin_version = "1.3"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -603,7 +603,7 @@ class UserSettingPlus(_PluginBase):
                 # 打印结果日志
                 user_type = "超级管理员" if self._is_superuser else "普通用户"
                 flag_type = "更新" if flag else "创建"
-                log = (f"用户 【 {self._name} 】 {flag_type}成功 - "
+                log = (f"用户 【 {name} 】 {flag_type}成功 - "
                        f"当前用户权限 【 {user_type} 】 - "
                        f"当前用户状态 【 {'启用' if self._is_active else '冻结'} 】")
                 logger.info(log)
@@ -887,7 +887,7 @@ class UserSettingPlus(_PluginBase):
             # 用户存在
             else:
                 # 获取当前用户信息
-                current_user = User.get_by_name(db=db, name=self._name)
+                current_user = User.get_by_name(db=db, name=name)
 
                 # 用户权限等级未发生变化
                 if self._is_superuser == (True if current_user.is_superuser == 1 else False):
@@ -942,7 +942,7 @@ class UserSettingPlus(_PluginBase):
             # 用户存在
             else:
                 # 获取当前用户信息
-                current_user = User.get_by_name(db=db, name=self._name)
+                current_user = User.get_by_name(db=db, name=name)
                 avatar = current_user.avatar
             return avatar
         except Exception as e:
