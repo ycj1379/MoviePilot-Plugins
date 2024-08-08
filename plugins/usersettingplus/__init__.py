@@ -12,11 +12,11 @@ class UserSettingPlus(_PluginBase):
     # 插件名称
     plugin_name = "用户管理拓展功能"
     # 插件描述
-    plugin_desc = "支持快速添加新的超级管理员；支持管理用户权限等级、用户密码、用户状态、用户邮箱。"
+    plugin_desc = "支持快速添加新的超级管理员；支持管理用户权限等级、用户名、用户密码、用户状态、用户邮箱。"
     # 插件图标
     plugin_icon = "setting.png"
     # 插件版本
-    plugin_version = "1.3"
+    plugin_version = "1.4"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -30,8 +30,9 @@ class UserSettingPlus(_PluginBase):
 
     _enabled = False
 
-    _name = None
+    _original_name = None
     _original_password = None
+    _new_name = None
     _new_password = None
     _two_password = None
     _email = None
@@ -43,8 +44,9 @@ class UserSettingPlus(_PluginBase):
 
         if config:
             self._enabled = config.get("enabled", False)
-            self._name = config.get("name", None)
+            self._original_name = config.get("original_name", None)
             self._original_password = config.get("original_password", None)
+            self._new_name = config.get("new_name", None)
             self._new_password = config.get("new_password", None)
             self._two_password = config.get("two_password", None)
             self._email = config.get("email", None)
@@ -63,9 +65,10 @@ class UserSettingPlus(_PluginBase):
         """
         config = {
             "enabled": self._enabled,
-            "name": self._name,
+            "original_name": self._original_name,
             "email": self._email,
             "original_password": self._original_password,
+            "new_name": self._new_name,
             "new_password": self._new_password,
             "two_password": self._two_password,
             "is_superuser": self._is_superuser,
@@ -78,9 +81,10 @@ class UserSettingPlus(_PluginBase):
         默认配置
         """
         self._enabled = False
-        self._name = None
+        self._original_name = None
         self._email = None
         self._original_password = None
+        self._new_name = None
         self._new_password = None
         self._two_password = None
         self._is_superuser = False
@@ -184,29 +188,6 @@ class UserSettingPlus(_PluginBase):
                                 },
                                 'content': [
                                     {
-                                        'component': 'VCombobox',
-                                        'props': {
-                                            'model': 'name',
-                                            'label': '用户名',
-                                            'placeholder': 'admin',
-                                            'multiple': False,
-                                            'items': UserTypeOptions,
-                                            'hint': '必选；登录时使用的用户名，支持手动输入与下拉框快速选择两种方式',
-                                            'persistent-hint': True,
-                                            'clearable': True,
-                                            'active': True,
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 3,
-                                },
-                                'content': [
-                                    {
                                         'component': 'VSelect',
                                         'props': {
                                             'model': 'is_superuser',
@@ -227,7 +208,7 @@ class UserSettingPlus(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 3,
+                                    'md': 6,
                                 },
                                 'content': [
                                     {
@@ -243,6 +224,60 @@ class UserSettingPlus(_PluginBase):
                                                 {'title': '启用', 'value': True},
                                                 {'title': '冻结', 'value': False},
                                             ],
+                                        }
+                                    }
+                                ]
+                            },
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'props': {
+                            'align': 'center',
+                        },
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 6,
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VCombobox',
+                                        'props': {
+                                            'model': 'original_name',
+                                            'label': '用户名',
+                                            'placeholder': 'admin',
+                                            'multiple': False,
+                                            'items': UserTypeOptions,
+                                            'hint': '必选；登录时使用的用户名，支持手动输入与下拉框快速选择两种方式',
+                                            'persistent-hint': True,
+                                            'clearable': True,
+                                            'active': True,
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 6,
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'new_name',
+                                            'label': '新的用户名',
+                                            'placeholder': 'admin',
+                                            'multiple': False,
+                                            'items': UserTypeOptions,
+                                            'hint': '修改登录时使用的用户名',
+                                            'persistent-hint': True,
+                                            'clearable': True,
+                                            'active': True,
                                         }
                                     }
                                 ]
@@ -470,7 +505,8 @@ class UserSettingPlus(_PluginBase):
                                                             'text': '1、插件 "创建" 或 "修改" 用户时，不会影响已有 "用户" 的 ”双重认证“、"头像" 等功能；"新用户" 如需设置这部分功能，请在创建后，自行登录设置！\n\n'
                                                                     '2、本插件只提供 "创建" 与 "修改" 功能，如需 "删除" 用户，请到 "设定" 页面进行操作！\n\n'
                                                                     '3、插件不会在日志里打印设置后的用户密码，请保存设置前，自行确定密码准确性！\n\n'
-                                                                    '4、"用户名" 支持通过下拉框快速选择 "已有用户"，名称虽显示为 "权限等级-用户名-状态组成"，但后台调用值仍为 "用户名"；手动输入 "用户名" 功能保持不变，请放心使用！\n'
+                                                                    '4、"用户名" 支持通过下拉框快速选择 "已有用户"，名称虽显示为 "权限等级-用户名-状态组成"，但后台调用值仍为 "用户名"；手动输入 "用户名" 功能保持不变，请放心使用！\n\n'
+                                                                    '5、当启动时设置好的 "SUPERUSER" 变量的 "用户名" 被改名或被删除时，下次重启 MoviePilot 时，系统会重新创建这个用户，建议设置一个同名用户将其冻结，以免 MoviePilot 自动创建，避免可能出现安全风险！'
                                                         }
                                                     }
                                                 ]
@@ -505,7 +541,7 @@ class UserSettingPlus(_PluginBase):
                                                             'variant': 'tonal',
                                                             'style': 'white-space: pre-line;',
                                                             'text':
-                                                                    '1、新建 "普通用户" 时，强制需要同时写入 "用户名"、"用户新密码"、"用户新密码-二次确认"、"用户邮箱"，不需要 "用户原密码" 认证。\n（对标MP默认的添加 "普通用户" 的逻辑方式）\n\n'
+                                                                    '1、新建 "普通用户" 时，强制需要同时写入 "用户名"、"用户新密码"、"用户新密码-二次确认"、"用户邮箱"，不需要 "用户原密码" 认证。\n（对标MP默认的添加 "普通用户" 的逻辑处理方式）\n\n'
                                                                     '2、新建 "普通用户" 时，没有密码规范，长短不限，但不能为空。\n\n'
                                                                     '3、已有的 "普通用户"，在修改任何配置时，都不需要输入 "用户原密码" 作为身份认证。\n\n'
                                                                     '4、已有的 "普通用户" 升级为 "超级管理员" 时，强制需要重新设置 "用户新密码" 与 "用户新密码-二次确认"，不需要 "用户原密码" 认证。（使 "普通用户" 升级后能匹配 "超级管理员规则 2" ）\n\n'
@@ -566,9 +602,10 @@ class UserSettingPlus(_PluginBase):
         ], {
             'enabled': False,
 
-            'name': None,
+            'original_name': None,
             'email': None,
             'original_password': None,
+            'new_name': None,
             'new_password': None,
             'two_password': None,
             'is_superuser': False,
@@ -593,7 +630,7 @@ class UserSettingPlus(_PluginBase):
         try:
             with SessionFactory() as db:
                 # 提取用户名
-                name = self._get_user_name(self._name)
+                name = self._get_user_name(self._original_name)
                 # 查看用户是否存在
                 flag = self.__check_user_exists(db=db, name=name)
                 # 验证配置并获取字典
@@ -642,7 +679,7 @@ class UserSettingPlus(_PluginBase):
             avatar = self.__validate_avatar(db=db, flag=flag, name=name)
 
             user_info = {
-                "name": name,
+                "name": self._new_name if self._new_name else name,
                 "hashed_password": new_hashed_password,
                 "email": email,
                 "is_superuser": is_superuser,
@@ -931,7 +968,8 @@ class UserSettingPlus(_PluginBase):
         except Exception as e:
             raise Exception(f"用户 【 {name} 】 的 邮箱参数 校验失败 - {e}")
 
-    def __validate_avatar(self, db, flag, name):
+    @staticmethod
+    def __validate_avatar(db, flag, name):
         """
         校验头像
         """
