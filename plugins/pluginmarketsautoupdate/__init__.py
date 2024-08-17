@@ -27,7 +27,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
     # 插件图标
     plugin_icon = "upload.png"
     # 插件版本
-    plugin_version = "1.2"
+    plugin_version = "1.3"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -45,7 +45,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
 
     _enabled = False
     _onlyonce = False
-    _corn = "86400"
+    _corn = 86400
     _enabled_update_notify = False
     _enabled_write_notify = False
     _notify_type = "Plugin"
@@ -118,10 +118,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
                     kwargs = {"seconds": int(self._corn)}
                     logger.debug(f"使用间隔时间运行定时任务 - 【{self._corn}】")
                 else:
-                    # 使用cron表达式
-                    trigger = CronTrigger.from_crontab(self._corn)
-                    kwargs = {}
-                    logger.debug(f"使用Cron表达式运行定时任务 - 【{self._corn}】")
+                    raise ValueError("corn不是整数，暂不支持其他格式")
                 services = [
                     {
                         "id": "PluginMarketUpdate",
@@ -152,7 +149,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
         default_config = {
             "enabled": False,
             "onlyonce": False,
-            "corn": {'title': '每 1 天', 'value': '86400'},
+            "corn": 86400,
             "enabled_update_notify": False,
             "enabled_write_notify": False,
             "notify_type": "Plugin",
@@ -175,6 +172,22 @@ class PluginMarketsAutoUpdate(_PluginBase):
                 "title": item.value,
                 "value": item.name
             })
+
+        corn_options = [
+            {'title': '每 1 天', 'value': 86400},
+            {'title': '每 2 天', 'value': 172800},
+            {'title': '每 3 天', 'value': 259200},
+            {'title': '每 4 天', 'value': 345600},
+            {'title': '每 5 天', 'value': 432000},
+            {'title': '每 6 天', 'value': 518400},
+            {'title': '每 7 天', 'value': 604800},
+            {'title': '每 15 天', 'value': 1296000},
+            {'title': '每 30 天', 'value': 2592000},
+            {'title': '每 60 天', 'value': 5184000},
+            {'title': '每 90 天', 'value': 7776000},
+            {'title': '每 180 天', 'value': 15552000},
+            {'title': '每 365 天', 'value': 31536000},
+        ]
 
         markets_list = []
 
@@ -257,21 +270,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                             # 'placeholder': '支持5位cron表达式',
                                             'active': True,
                                             # 'clearable': True,
-                                            'items': [
-                                                {'title': '每 1 天', 'value': '86400'},
-                                                {'title': '每 2 天', 'value': '172800'},
-                                                {'title': '每 3 天', 'value': '259200'},
-                                                {'title': '每 4 天', 'value': '345600'},
-                                                {'title': '每 5 天', 'value': '432000'},
-                                                {'title': '每 6 天', 'value': '518400'},
-                                                {'title': '每 7 天', 'value': '604800'},
-                                                {'title': '每 15 天', 'value': '1296000'},
-                                                {'title': '每 30 天', 'value': '2592000'},
-                                                {'title': '每 60 天', 'value': '5184000'},
-                                                {'title': '每 90 天', 'value': '7776000'},
-                                                {'title': '每 180 天', 'value': '15552000'},
-                                                {'title': '每 365 天', 'value': '31536000'},
-                                            ],
+                                            'items': corn_options,
                                             "item-value": "value",
                                             "item-title": "title",
                                         }
@@ -1078,7 +1077,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
                     wiki_markets_list=wiki_markets_list)
                 # 获取需要写入app.env的插件库
                 if self._enabled_write_new_markets:
-                    env_markets_list = self.write_markets_to_env(env_markets_list=env_markets_list,
+                    env_markets_list = self.write_markets_to_env(wiki_markets_list=wiki_markets_list,
                                                                  other_markets_list=other_markets_list)
             except Exception as e:
                 logger.error(f'{"手动" if manual else "定时"}任务运行失败 - {e}')
@@ -1342,10 +1341,10 @@ class PluginMarketsAutoUpdate(_PluginBase):
 
     # 写入app.env
 
-    def write_markets_to_env(self, env_markets_list, other_markets_list):
+    def write_markets_to_env(self, wiki_markets_list, other_markets_list):
         try:
             # 提取需要写入的插件库
-            write_markets_list = self.__get_write_markets(env_markets_list=env_markets_list,
+            write_markets_list = self.__get_write_markets(wiki_markets_list=wiki_markets_list,
                                                           other_markets_list=other_markets_list)
             # 写入app.env
             self.__update_env(write_markets_list=write_markets_list)
@@ -1358,11 +1357,11 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                     text=f"成功写入 {len(write_markets_list)} 个插件库地址到app.env")
             return write_markets_list
 
-    def __get_write_markets(self, env_markets_list, other_markets_list):
+    def __get_write_markets(self, wiki_markets_list, other_markets_list):
         """
         生成最后需要更新到env中的值的列表
         """
-        all_markets_list = env_markets_list + other_markets_list
+        all_markets_list = wiki_markets_list + other_markets_list
         try:
             if self._enabled_blacklist:
                 blacklist = self.__valid_markets_list(self._blacklist, mode="插件写入黑名单")
@@ -1400,7 +1399,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
                     if write_markets_str != plugin_market:  # 只有在内容变更时才更新配置
                         config["PLUGIN_MARKET"] = write_markets_str
                         self.update_config(config=config, plugin_id="ConfigCenter")
-                        self.__reload_plugin(plugin_id="CustomHosts")
+                        self.__reload_plugin(plugin_id="ConfigCenter")
                         logger.info("Hosts还原完成")
                     else:
                         logger.info("当前插件库地址与配置中心一致，无需更新配置中心中的值")
