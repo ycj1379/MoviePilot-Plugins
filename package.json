@@ -83,7 +83,7 @@
     },
     "UserSettingPlus": {
         "name": "用户管理拓展功能",
-        "description": "支持快速添加新的超级管理员；支持管理用户权限等级、用户密码、用户状态、用户邮箱。",
+        "description": "支持快速添加新的超级管理员；支持管理用户权限等级、用户名、用户密码、用户状态、用户邮箱。",
         "version": "1.4",
         "labels": "系统设置,工具",
         "icon": "setting.png",
@@ -123,6 +123,18 @@
         "history": {
           "v1.1": "修复：部分错误文案。增加：支持端对端加密模式；图片消息支持。优化：修改为post请求。",
           "v1.0": "增加：支持使用Server酱发送消息通知。"
+        }
+    },
+    "PluginMarketsAutoUpdate": {
+        "name": "插件库更新推送",
+        "description": "支持从官方Wiki中获取记录的最新全量插件库、结合添加黑名单，自动化添加插件库。",
+        "version": "1.0",
+        "labels": "插件管理",
+        "icon": "upload.png",
+        "author": "Aqr-K",
+        "level": 1,
+        "history": {
+          "v1.0": "增加：支持插件库更新推送，并按需添加插件。"
         }
     }
 }
