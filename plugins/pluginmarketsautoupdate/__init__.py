@@ -26,7 +26,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
     # 插件图标
     plugin_icon = "upload.png"
     # 插件版本
-    plugin_version = "1.4"
+    plugin_version = "1.5"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -1106,6 +1106,9 @@ class PluginMarketsAutoUpdate(_PluginBase):
             wiki_markets_list = self._get_wiki_code()
             # 判断是否有新插件库
             new_markets_list = self._get_new_markets_list(wiki_markets_list=wiki_markets_list)
+            # 格式修正，补全没有以/结尾的地址
+            new_markets_list = [url if url.endswith("/") else f"{url}/" for url in new_markets_list]
+            wiki_markets_list = [url if url.endswith("/") else f"{url}/" for url in wiki_markets_list]
             return wiki_markets_list, new_markets_list
         except Exception as e:
             raise Exception(e)
@@ -1168,9 +1171,9 @@ class PluginMarketsAutoUpdate(_PluginBase):
         与前一次对比，查看是否有新插件库
         """
         try:
-            if self.get_data("wiki_markets_list"):
-                backup_wiki_markets_list = self.__valid_markets_list(plugin_markets=self.get_data("wiki_markets_list"),
-                                                                     mode="上次更新缓存")
+            if self.get_data("data_list"):
+                urls = [value['url'] for key, value in self.get_data("data_list").items() if 'url' in value]
+                backup_wiki_markets_list = self.__valid_markets_list(plugin_markets=urls, mode="上次更新缓存")
             else:
                 backup_wiki_markets_list = []
             # 有上次
@@ -1212,6 +1215,9 @@ class PluginMarketsAutoUpdate(_PluginBase):
             # 提取已经写入的不在官方库的第三方插件库
             other_markets_list = self.__get_other_markets(env_markets_list=env_markets_list,
                                                           wiki_markets_list=wiki_markets_list)
+            # 格式修正
+            env_markets_list = [url if url.endswith("/") else f"{url}/" for url in env_markets_list]
+            other_markets_list = [url if url.endswith("/") else f"{url}/" for url in other_markets_list]
             return env_markets_list, other_markets_list
         except Exception as e:
             logger.error(f"提取配置失败 - {e}")
@@ -1365,7 +1371,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
         """
         生成最后需要更新到env中的值的列表
         """
-        all_markets_list = wiki_markets_list + other_markets_list
+        all_markets_list = list(set(wiki_markets_list) | set(other_markets_list))
         try:
             if self._enabled_blacklist:
                 blacklist = self.__valid_markets_list(self._blacklist, mode="插件写入黑名单")
@@ -1394,25 +1400,33 @@ class PluginMarketsAutoUpdate(_PluginBase):
         except Exception as e:
             raise Exception(e)
         else:
-            try:
-                if self.__check_settings_plugins_installed():
-                    logger.info("正在准备同步更新配置中心")
-                    config = self.get_config(plugin_id="ConfigCenter") or {}
+            self._update_other_plugins(write_markets_str=write_markets_str)
+
+    # 同步显示
+
+    def _update_other_plugins(self, write_markets_str):
+        """
+        同步并更新其他插件
+        """
+        try:
+            flag, installed_plugins = self.__check_settings_plugins_installed()
+            if flag:
+                logger.info("正在准备同步更新显示")
+                for plugin_id, plugin_name in (item for plugin in installed_plugins for item in plugin.items()):
+                    config = self.get_config(plugin_id=plugin_id) or {}
                     plugin_market = config.get("PLUGIN_MARKET", "")
-
-                    if write_markets_str != plugin_market:  # 只有在内容变更时才更新配置
+                    # 只有在内容变更时，才更新配置
+                    if write_markets_str != plugin_market:
                         config["PLUGIN_MARKET"] = write_markets_str
-                        self.update_config(config=config, plugin_id="ConfigCenter")
-                        self.__reload_plugin(plugin_id="ConfigCenter")
-                        logger.info("Hosts还原完成")
+                        self.update_config(config=config, plugin_id=plugin_id)
+                        self.__reload_plugin(plugin_id=plugin_id)
+                        logger.info(f"【{plugin_name}】更新完成")
                     else:
-                        logger.info("当前插件库地址与配置中心一致，无需更新配置中心中的值")
-            except Exception as e:
-                logger.error(f"同步更新配置中心失败 - {e}")
+                        logger.info(f"【{plugin_name}】中的值与当前插件库地址一致，无需更新")
+        except Exception as e:
+            logger.error(f"同步显示更新任务失败 - {e}")
 
-    # 配置中心显示同步
-
-    def __check_settings_plugins_installed(self) -> (bool, str):
+    def __check_settings_plugins_installed(self) -> (bool, list):
         """
         检查需要同步的插件是否已安装
         """
@@ -1423,19 +1437,19 @@ class PluginMarketsAutoUpdate(_PluginBase):
         # 获取本地插件列表
         local_plugins = self.pluginmanager.get_local_plugins()
 
-        # 初始化未安装插件列表
-        missing_plugins = []
+        # 初始化已安装插件列表
+        installed_plugins = []
 
         # 校验所有的插件是否已安装
         for plugin_id, plugin_name in plugin_names.items():
             plugin = next((p for p in local_plugins if p.id == plugin_id and p.installed), None)
-            if not plugin:
-                missing_plugins.append(plugin_name)
+            if plugin:
+                installed_plugins.append({plugin_id: plugin_name})
 
-        if missing_plugins:
-            return False
+        if installed_plugins:
+            return True, installed_plugins
 
-        return True
+        return False, []
 
     def __reload_plugin(self, plugin_id: str):
         """
@@ -1478,7 +1492,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
         更新并保存统计信息
         """
         statistic_info = self.__get_statistic_info()
-        all_markets_list = wiki_markets_list + other_markets_list
+        all_markets_list = list(set(wiki_markets_list) | set(other_markets_list))
 
         other_markets = []
         wiki_markets = []
