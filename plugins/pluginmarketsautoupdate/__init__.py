@@ -9,8 +9,10 @@ from dotenv import set_key
 from lxml import html
 
 from app.core.config import settings
+from app.core.plugin import PluginManager
 from app.log import logger
 from app.plugins import _PluginBase
+from app.scheduler import Scheduler
 from app.schemas import NotificationType
 from app.utils.http import RequestUtils
 
@@ -25,7 +27,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
     # 插件图标
     plugin_icon = "upload.png"
     # 插件版本
-    plugin_version = "1.0"
+    plugin_version = "1.2"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -38,6 +40,8 @@ class PluginMarketsAutoUpdate(_PluginBase):
     auth_level = 1
 
     env_path = settings.CONFIG_PATH / "app.env"
+
+    pluginmanager = PluginManager()
 
     _enabled = False
     _onlyonce = False
@@ -360,6 +364,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                             'variant': 'tonal',
                                             'style': 'white-space: pre-line;',
                                             'text': '注意：直接返回 "查看数据" 并不会触发刷新，在保存或关闭后，重新打开插件设置，才能查看刷新后的数据统计！！！\n'
+                                                    '本插件的写入功能只适用于没有在环境变量中写死 "PLUGIN_MARKET" 的搭建方式，请去除环境变量里的值后再运行！'
                                         }
                                     },
                                 ]
@@ -688,7 +693,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                                                     '1、当官网出现，域名与路径被替换、Xpath变动时，可自行修改高级设置的 "Wiki插件库记录地址"、"记录页面Xpath定位路径"，以保证功能的正常运行。\n\n'
                                                                     '2、启用 "允许前端自动获取Wiki数据" 在打开 "配置页面"(不是"查看数据") 时，后台会激活运行一次，用于获取数据，但相对应，也会增加打开时的显示等待时间。\n\n'
                                                                     '3、启用 "启用代理访问" 需要配置 "PROXY_HOST"；没有配置 "PROXY_HOST" 时，启用该项会默认使用系统网络环境，不会导致运行失败。\n\n'
-                                                                    '4、"Wiki访问超时时间" 只支持整数，单位为秒，小数点后的数字会被后台忽略，如：3.5 会被转换为 3 秒；且在输入的参数存在问题的时候，会用默认值3秒。\n\n'
+                                                                    '4、"Wiki访问超时时间" 只支持整数，单位为秒，小数点后的数字会被后台忽略，如：3.5 会被转换为 3 秒；且在输入的参数存在问题的时候，会用默认值 5 秒。\n\n'
                                                                     '5、"Wiki插件库记录地址"、"记录页面Xpath定位路径" 此两项参数，直接关系到是否能成功获取到Wiki官网记录的库地址，不懂得如何获取的用户，请不要随意修改这两项参数！'
                                                         }
                                                     }
@@ -1385,6 +1390,73 @@ class PluginMarketsAutoUpdate(_PluginBase):
                 raise ValueError("写入env的值格式不合法")
         except Exception as e:
             raise Exception(e)
+        else:
+            try:
+                if self.__check_settings_plugins_installed():
+                    logger.info("正在准备同步更新配置中心")
+                    config = self.get_config(plugin_id="ConfigCenter") or {}
+                    plugin_market = config.get("PLUGIN_MARKET", "")
+
+                    if write_markets_str != plugin_market:  # 只有在内容变更时才更新配置
+                        config["PLUGIN_MARKET"] = write_markets_str
+                        self.update_config(config=config, plugin_id="ConfigCenter")
+                        self.__reload_plugin(plugin_id="CustomHosts")
+                        logger.info("Hosts还原完成")
+                    else:
+                        logger.info("当前插件库地址与配置中心一致，无需更新配置中心中的值")
+            except Exception as e:
+                logger.error(f"同步更新配置中心失败 - {e}")
+
+    # 配置中心显示同步
+
+    def __check_settings_plugins_installed(self) -> (bool, str):
+        """
+        检查需要同步的插件是否已安装
+        """
+        plugin_names = {
+            "ConfigCenter": "配置中心",
+        }
+
+        # 获取本地插件列表
+        local_plugins = self.pluginmanager.get_local_plugins()
+
+        # 初始化未安装插件列表
+        missing_plugins = []
+
+        # 校验所有的插件是否已安装
+        for plugin_id, plugin_name in plugin_names.items():
+            plugin = next((p for p in local_plugins if p.id == plugin_id and p.installed), None)
+            if not plugin:
+                missing_plugins.append(plugin_name)
+
+        if missing_plugins:
+            return False
+
+        return True
+
+    def __reload_plugin(self, plugin_id: str):
+        """
+        热加载
+        """
+        logger.info(f"准备热加载插件: {plugin_id}")
+
+        # 加载插件到内存
+        try:
+            self.pluginmanager.reload_plugin(plugin_id)
+            logger.info(f"成功热加载插件: {plugin_id} 到内存")
+        except Exception as e:
+            logger.error(f"失败热加载插件: {plugin_id} 到内存. 错误信息: {e}")
+            return
+
+        # 注册插件服务
+        try:
+            Scheduler().update_plugin_job(plugin_id)
+            logger.info(f"成功热加载插件到插件服务: {plugin_id}")
+        except Exception as e:
+            logger.error(f"失败热加载插件到插件服务: {plugin_id}. 错误信息: {e}")
+            return
+
+        logger.info(f"已完成插件热加载: {plugin_id}")
 
     # 推送通知
 
