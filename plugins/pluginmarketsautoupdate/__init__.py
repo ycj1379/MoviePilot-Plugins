@@ -4,7 +4,6 @@ from threading import Lock
 from typing import Any, List, Dict, Tuple, Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
 from dotenv import set_key
 from lxml import html
 
@@ -27,7 +26,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
     # 插件图标
     plugin_icon = "upload.png"
     # 插件版本
-    plugin_version = "1.3"
+    plugin_version = "1.4"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -1261,6 +1260,11 @@ class PluginMarketsAutoUpdate(_PluginBase):
                     timeout = self._timeout
                 elif isinstance(self._timeout, float):
                     timeout = int(self._timeout)
+                elif isinstance(self._timeout, str):
+                    if self.is_integer(self._timeout):
+                        timeout = int(self._timeout)
+                    else:
+                        raise ValueError("超时时间格式不合法")
                 else:
                     raise ValueError("超时时间格式不合法")
                 if 1 > int(timeout) >= 0:
