@@ -27,7 +27,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
     # 插件图标
     plugin_icon = "upload.png"
     # 插件版本
-    plugin_version = "1.7"
+    plugin_version = "1.7.1"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -359,8 +359,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                             'variant': 'tonal',
                                             'style': 'white-space: pre-line;',
                                             'text': '注意：\n'
-                                                    '直接返回 "查看数据" 并不会触发刷新，只有在保存或关闭后，重新打开插件设置，才能查看刷新后的数据统计。\n'
-                                                    '本插件的写入功能，只适用于没有使用环境变量 "PLUGIN_MARKET" 的搭建方式；请去除该值后再运行！'
+                                                    '直接返回 "查看数据" 并不会触发刷新，只有在保存或关闭后，重新打开插件设置，才能查看刷新后的数据统计。'
                                         }
                                     },
                                 ]
