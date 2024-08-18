@@ -1,4 +1,5 @@
 import traceback
+from collections import Counter
 from datetime import datetime
 from threading import Lock
 from typing import Any, List, Dict, Tuple, Optional
@@ -26,7 +27,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
     # 插件图标
     plugin_icon = "upload.png"
     # 插件版本
-    plugin_version = "1.5"
+    plugin_version = "1.6"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -859,7 +860,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                                 'props': {
                                                     'class': 'text-caption'
                                                 },
-                                                'text': '全部插件库 / 官方库 / 非官方库'
+                                                'text': '全部插件库 / 官方 / 非官方'
                                             },
                                             {
                                                 'component': 'div',
@@ -913,7 +914,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                                 'props': {
                                                     'class': 'text-caption'
                                                 },
-                                                'text': '当前 ENV 内库 / 官方库 / 非官方库'
+                                                'text': '本地已配置库 / 官方 / 非官方'
                                             },
                                             {
                                                 'component': 'div',
@@ -967,7 +968,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                                 'props': {
                                                     'class': 'text-caption'
                                                 },
-                                                'text': '黑名单库 / 被命中黑名单库'
+                                                'text': '黑名单库 / 被命中'
                                             },
                                             {
                                                 'component': 'div',
@@ -1021,7 +1022,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                                 'props': {
                                                     'class': 'text-caption'
                                                 },
-                                                'text': '更新时间'
+                                                'text': '上次更新时间'
                                             },
                                             {
                                                 'component': 'div',
@@ -1072,12 +1073,12 @@ class PluginMarketsAutoUpdate(_PluginBase):
                 # 获取Wiki插件库更新的新插件库
                 wiki_markets_list, new_markets_list = self.get_wiki_markets_list_and_new_markets_list()
                 # 获取已写入的插件库与第三方插件库
-                env_markets_list, other_markets_list = self.get_env_markets_list_and_other_markets_list(
+                other_markets_list = self.get_env_markets_list_and_other_markets_list(
                     wiki_markets_list=wiki_markets_list)
                 # 获取需要写入app.env的插件库
                 if self._enabled_write_new_markets:
-                    env_markets_list = self.write_markets_to_env(wiki_markets_list=wiki_markets_list,
-                                                                 other_markets_list=other_markets_list)
+                    self.write_markets_to_env(wiki_markets_list=wiki_markets_list,
+                                              other_markets_list=other_markets_list)
             except Exception as e:
                 logger.error(f'{"手动" if manual else "定时"}任务运行失败 - {e}')
                 if manual:
@@ -1088,7 +1089,6 @@ class PluginMarketsAutoUpdate(_PluginBase):
                 time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 # 更新 data_list
                 self.__update_and_save_statistic_info(wiki_markets_list=wiki_markets_list,
-                                                      env_markets_list=env_markets_list,
                                                       other_markets_list=other_markets_list,
                                                       time=time)
             finally:
@@ -1166,7 +1166,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
 
     # 提取新插件库
 
-    def _get_new_markets_list(self, wiki_markets_list) -> Optional[List]:
+    def _get_new_markets_list(self, wiki_markets_list) -> Optional[list]:
         """
         与前一次对比，查看是否有新插件库
         """
@@ -1194,13 +1194,13 @@ class PluginMarketsAutoUpdate(_PluginBase):
             if not new_markets_list:
                 logger.info("没有新的插件库更新")
             else:
-                if backup_wiki_markets_list:
+                if Counter(new_markets_list) != Counter(wiki_markets_list):
                     msg = f"有新的插件库更新"
                 else:
                     msg = f"首次获取到插件库"
                 logger.info(f'{msg} - 共获取到 {len(new_markets_list)} 个插件库地址')
                 if self._enabled_update_notify:
-                    self.__send_message(title=msg, text=f"共获取到 {len(new_markets_list)} 个插件库地址")
+                    self.__send_message(title=self.plugin_name, text=f"{msg} - 共获取到 {len(new_markets_list)} 个插件库地址")
             return new_markets_list
 
     # 提取已写入的插件库与第三方插件库
@@ -1216,9 +1216,8 @@ class PluginMarketsAutoUpdate(_PluginBase):
             other_markets_list = self.__get_other_markets(env_markets_list=env_markets_list,
                                                           wiki_markets_list=wiki_markets_list)
             # 格式修正
-            env_markets_list = [url if url.endswith("/") else f"{url}/" for url in env_markets_list]
             other_markets_list = [url if url.endswith("/") else f"{url}/" for url in other_markets_list]
-            return env_markets_list, other_markets_list
+            return other_markets_list
         except Exception as e:
             logger.error(f"提取配置失败 - {e}")
             return False
@@ -1357,15 +1356,14 @@ class PluginMarketsAutoUpdate(_PluginBase):
             write_markets_list = self.__get_write_markets(wiki_markets_list=wiki_markets_list,
                                                           other_markets_list=other_markets_list)
             # 写入app.env
-            self.__update_env(write_markets_list=write_markets_list)
+            status = self.__update_env(write_markets_list=write_markets_list)
         except Exception as e:
             raise Exception(f"写入app.env失败 - {e}")
         else:
-            logger.info(f"成功写入 {len(write_markets_list)} 个插件库地址到app.env")
-            if self._enabled_write_notify:
-                self.__send_message(title="插件库更新",
-                                    text=f"成功写入 {len(write_markets_list)} 个插件库地址到app.env")
-            return write_markets_list
+            logger.info(f"成功覆盖式写入 {len(write_markets_list)} 个插件库地址到app.env")
+            if self._enabled_write_notify and status:
+                self.__send_message(title=self.plugin_name,
+                                    text=f"成功覆盖式写入 {len(write_markets_list)} 个插件库地址到app.env")
 
     def __get_write_markets(self, wiki_markets_list, other_markets_list):
         """
@@ -1373,11 +1371,8 @@ class PluginMarketsAutoUpdate(_PluginBase):
         """
         all_markets_list = list(set(wiki_markets_list) | set(other_markets_list))
         try:
-            if self._enabled_blacklist:
+            if self._enabled_blacklist and self._blacklist:
                 blacklist = self.__valid_markets_list(self._blacklist, mode="插件写入黑名单")
-            else:
-                blacklist = []
-            if blacklist:
                 write_markets_list = [url for url in all_markets_list if url not in blacklist]
                 return write_markets_list
             else:
@@ -1391,16 +1386,21 @@ class PluginMarketsAutoUpdate(_PluginBase):
         更新env
         """
         try:
+            # 判断是否与当前的值一致
+            if Counter(write_markets_list) == Counter(self.__valid_markets_list(settings.PLUGIN_MARKET, mode="当前ENV配置")):
+                logger.info("当前插件库地址与env配置一致，无需更新")
+                return False
             # 将新插件键库转换成str
             if isinstance(write_markets_list, list):
                 write_markets_str = ",".join(write_markets_list)
                 set_key(dotenv_path=self.env_path, key_to_set="PLUGIN_MARKET", value_to_set=write_markets_str)
             else:
-                raise ValueError("写入env的值格式不合法")
+                raise ValueError("写入env的值，格式不合法")
         except Exception as e:
             raise Exception(e)
         else:
             self._update_other_plugins(write_markets_str=write_markets_str)
+            return True
 
     # 同步显示
 
@@ -1487,7 +1487,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
 
     # 统计
 
-    def __update_and_save_statistic_info(self, env_markets_list, wiki_markets_list, other_markets_list, time):
+    def __update_and_save_statistic_info(self, wiki_markets_list, other_markets_list, time):
         """
         更新并保存统计信息
         """
@@ -1496,6 +1496,8 @@ class PluginMarketsAutoUpdate(_PluginBase):
 
         other_markets = []
         wiki_markets = []
+        # 直接env配置的库进行对比筛查
+        env_markets_list = self.__valid_markets_list(settings.PLUGIN_MARKET, mode="当前ENV配置")
         for url in env_markets_list:
             if not url.endswith("/"):
                 url += "/"
