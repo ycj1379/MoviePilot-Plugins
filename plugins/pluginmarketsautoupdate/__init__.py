@@ -27,7 +27,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
     # 插件图标
     plugin_icon = "upload.png"
     # 插件版本
-    plugin_version = "1.6"
+    plugin_version = "1.7"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -258,18 +258,14 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                 },
                                 'content': [
                                     {
-                                        # 选择加手动输入
-                                        # 'component': 'VCombobox',
-                                        # 只可选择
+
                                         'component': 'VSelect',
                                         'props': {
                                             'model': 'corn',
                                             'label': '定时任务间隔时间',
                                             'hint': '选择定时扫描时间',
                                             'persistent-hint': True,
-                                            # 'placeholder': '支持5位cron表达式',
                                             'active': True,
-                                            # 'clearable': True,
                                             'items': corn_options,
                                             "item-value": "value",
                                             "item-title": "title",
@@ -362,8 +358,9 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                             'type': 'warning',
                                             'variant': 'tonal',
                                             'style': 'white-space: pre-line;',
-                                            'text': '注意：直接返回 "查看数据" 并不会触发刷新，在保存或关闭后，重新打开插件设置，才能查看刷新后的数据统计！！！\n'
-                                                    '本插件的写入功能只适用于没有在环境变量中写死 "PLUGIN_MARKET" 的搭建方式，请去除环境变量里的值后再运行！'
+                                            'text': '注意：\n'
+                                                    '直接返回 "查看数据" 并不会触发刷新，只有在保存或关闭后，重新打开插件设置，才能查看刷新后的数据统计。\n'
+                                                    '本插件的写入功能，只适用于没有使用环境变量 "PLUGIN_MARKET" 的搭建方式；请去除该值后再运行！'
                                         }
                                     },
                                 ]
@@ -441,8 +438,8 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                                         'component': 'VSwitch',
                                                         'props': {
                                                             'model': 'enabled_write_new_markets',
-                                                            'label': '自动写入新增库',
-                                                            'hint': '开启后，新插件库将自动写入env',
+                                                            'label': '自动写入新配置',
+                                                            'hint': '开启后，出现新插件库时，将自动写入配置中',
                                                             'persistent-hint': True,
                                                         }
                                                     },
@@ -460,7 +457,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                                         'props': {
                                                             'model': 'enabled_blacklist',
                                                             'label': '启用写入黑名单',
-                                                            'hint': '黑名单内的插件库不会被写入env',
+                                                            'hint': '黑名单内的插件库不会被写入配置中',
                                                             'persistent-hint': True,
                                                         }
                                                     },
@@ -525,7 +522,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                                             'placeholder': '支持下拉选择，支持手动输入，输入的地址将不会被写入到app.env中',
                                                             'hint': '选中的插件库将被添加到黑名单中，不会自动添加；已写入env的黑名单插件库，也会在下次运行写入时移除；只移除插件库，插件本身不会被卸载',
                                                             'persistent-hint': True,
-                                                            'no-data-text': '没有从 wiki 与 ENV 配置中获取到数据，无法生成快捷选项，可预先手动输入需要加入黑名单的 插件库地址。',
+                                                            'no-data-text': '没有从 wiki 与 当前配置 中获取到数据，无法生成快捷选项，可预先手动输入需要加入黑名单的 插件库地址。',
                                                             'active': True,
                                                             'hide-no-data': False,
                                                         }
@@ -563,8 +560,8 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                                         'component': 'VSwitch',
                                                         'props': {
                                                             'model': 'enabled_auto_get',
-                                                            'label': '允许前端自动获取Wiki数据',
-                                                            'hint': '允许前端打开时，立刻获取Wiki数据',
+                                                            'label': '允许前端自动运行',
+                                                            'hint': '前端打开时，立刻运行一次插件全部功能',
                                                             'persistent-hint': True,
                                                         }
                                                     },
@@ -659,7 +656,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                                             'model': 'wiki_url_xpath',
                                                             'label': '记录页面Xpath定位路径',
                                                             'placeholder': '//pre[@class="prismjs line-numbers" and @v-pre="true"]/code/text()',
-                                                            'hint': '提取Wiki插件库记录地址的Xpath路径，留空则使用默认Xpath路径',
+                                                            'hint': '提取Wiki插件库记录地址的Xpath路径，留空则使用默认Xpath定位路径',
                                                             'persistent-hint': True,
                                                             'active': True,
                                                             'clearable': True,
@@ -690,7 +687,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                                             'style': 'white-space: pre-line;',
                                                             'text': '高级设置注意事项：\n'
                                                                     '1、当官网出现，域名与路径被替换、Xpath变动时，可自行修改高级设置的 "Wiki插件库记录地址"、"记录页面Xpath定位路径"，以保证功能的正常运行。\n\n'
-                                                                    '2、启用 "允许前端自动获取Wiki数据" 在打开 "配置页面"(不是"查看数据") 时，后台会激活运行一次，用于获取数据，但相对应，也会增加打开时的显示等待时间。\n\n'
+                                                                    '2、启用 "允许前端自动运行" 在打开 "配置页面"(不是"查看数据") 时，后台会激活运行一次插件全部功能，主要用于立刻获取新数据生成黑名单快捷列表；但相对应的，对于不同的网络环境，此选项也会增加打开时，需要等待显示的时间。（如果介意延迟，可以不开此项，不会影响插件本身功能）\n\n'
                                                                     '3、启用 "启用代理访问" 需要配置 "PROXY_HOST"；没有配置 "PROXY_HOST" 时，启用该项会默认使用系统网络环境，不会导致运行失败。\n\n'
                                                                     '4、"Wiki访问超时时间" 只支持整数，单位为秒，小数点后的数字会被后台忽略，如：3.5 会被转换为 3 秒；且在输入的参数存在问题的时候，会用默认值 5 秒。\n\n'
                                                                     '5、"Wiki插件库记录地址"、"记录页面Xpath定位路径" 此两项参数，直接关系到是否能成功获取到Wiki官网记录的库地址，不懂得如何获取的用户，请不要随意修改这两项参数！'
@@ -1200,7 +1197,8 @@ class PluginMarketsAutoUpdate(_PluginBase):
                     msg = f"首次获取到插件库"
                 logger.info(f'{msg} - 共获取到 {len(new_markets_list)} 个插件库地址')
                 if self._enabled_update_notify:
-                    self.__send_message(title=self.plugin_name, text=f"{msg} - 共获取到 {len(new_markets_list)} 个插件库地址")
+                    self.__send_message(title=self.plugin_name,
+                                        text=f"{msg} - 共获取到 {len(new_markets_list)} 个插件库地址")
             return new_markets_list
 
     # 提取已写入的插件库与第三方插件库
@@ -1237,7 +1235,8 @@ class PluginMarketsAutoUpdate(_PluginBase):
                         other_markets.append(url)
                 return other_markets
             elif not env_markets_list and wiki_markets_list:
-                raise ValueError("未获取到已写入的插件库")
+                logger.warning("本地配置插件库为空，没有第三方插件库")
+                return []
             elif not wiki_markets_list and env_markets_list:
                 raise ValueError("未获取到全量插件库")
             else:
@@ -1360,10 +1359,14 @@ class PluginMarketsAutoUpdate(_PluginBase):
         except Exception as e:
             raise Exception(f"写入app.env失败 - {e}")
         else:
-            logger.info(f"成功覆盖式写入 {len(write_markets_list)} 个插件库地址到app.env")
-            if self._enabled_write_notify and status:
-                self.__send_message(title=self.plugin_name,
-                                    text=f"成功覆盖式写入 {len(write_markets_list)} 个插件库地址到app.env")
+            # 只有成功，才发送通知
+            if status:
+                logger.info(f"成功覆盖式写入 {len(write_markets_list)} 个插件库地址到app.env")
+                if self._enabled_write_notify:
+                    self.__send_message(title=self.plugin_name,
+                                        text=f"成功覆盖式写入 {len(write_markets_list)} 个插件库地址到app.env")
+            else:
+                logger.info("当前插件库地址与本地配置一致，无需更新")
 
     def __get_write_markets(self, wiki_markets_list, other_markets_list):
         """
@@ -1386,21 +1389,27 @@ class PluginMarketsAutoUpdate(_PluginBase):
         更新env
         """
         try:
-            # 判断是否与当前的值一致
-            if Counter(write_markets_list) == Counter(self.__valid_markets_list(settings.PLUGIN_MARKET, mode="当前ENV配置")):
-                logger.info("当前插件库地址与env配置一致，无需更新")
-                return False
-            # 将新插件键库转换成str
-            if isinstance(write_markets_list, list):
-                write_markets_str = ",".join(write_markets_list)
-                set_key(dotenv_path=self.env_path, key_to_set="PLUGIN_MARKET", value_to_set=write_markets_str)
+            # 一致，无需更新
+            if Counter(write_markets_list) == Counter(
+                    self.__valid_markets_list(settings.PLUGIN_MARKET, mode="当前ENV配置")):
+                write_markets_str = None
+                status = False
+            # 不一致，更新
             else:
-                raise ValueError("写入env的值，格式不合法")
+                if isinstance(write_markets_list, list):
+                    write_markets_str = ",".join(write_markets_list)
+                    set_key(dotenv_path=self.env_path, key_to_set="PLUGIN_MARKET", value_to_set=write_markets_str)
+                    status = True
+                else:
+                    raise ValueError("写入env的值，格式不合法")
         except Exception as e:
             raise Exception(e)
         else:
-            self._update_other_plugins(write_markets_str=write_markets_str)
-            return True
+            if write_markets_str:
+                # 更新settings.PLUGIN_MARKET
+                settings.PLUGIN_MARKET = write_markets_str
+                self._update_other_plugins(write_markets_str=write_markets_str)
+            return status
 
     # 同步显示
 
