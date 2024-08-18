@@ -5,7 +5,7 @@ from threading import Lock
 from typing import Any, List, Dict, Tuple, Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from dotenv import set_key
+from dotenv import set_key, dotenv_values
 from lxml import html
 
 from app.core.config import settings
@@ -27,7 +27,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
     # 插件图标
     plugin_icon = "upload.png"
     # 插件版本
-    plugin_version = "1.8"
+    plugin_version = "1.8.1"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -1100,6 +1100,10 @@ class PluginMarketsAutoUpdate(_PluginBase):
                 # 获取已写入的插件库与第三方插件库
                 other_markets_list = self.get_env_markets_list_and_other_markets_list(
                     wiki_markets_list=wiki_markets_list)
+
+                logger.debug(f"当前系统配置的插件库地址 - {settings.PLUGIN_MARKET}")
+                logger.debug(f'当前ENV文件内的插件库地址 - {dotenv_values(self.env_path).get("PLUGIN_MARKET", "")}')
+
                 # 获取需要写入app.env的插件库
                 if self._enabled_write_new_markets:
                     in_blacklist_markets_list = self.write_markets_to_settings(wiki_markets_list=wiki_markets_list,
@@ -1449,7 +1453,8 @@ class PluginMarketsAutoUpdate(_PluginBase):
         except Exception as e:
             raise Exception(e)
         else:
-            self._update_other_plugins(write_markets_str=write_markets_str)
+            if write_markets_str:
+                self._update_other_plugins(write_markets_str=write_markets_str)
 
     # 同步显示
 
