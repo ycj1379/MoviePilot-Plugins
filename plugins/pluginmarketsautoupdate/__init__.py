@@ -27,7 +27,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
     # 插件图标
     plugin_icon = "upload.png"
     # 插件版本
-    plugin_version = "1.7.1"
+    plugin_version = "1.8"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -51,6 +51,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
     _notify_type = "Plugin"
 
     _enabled_write_new_markets = False
+    _enabled_write_new_markets_to_env = False
     _enabled_blacklist = False
     _blacklist = []
 
@@ -79,6 +80,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
             self._notify_type = config.get("notify_type")
 
             self._enabled_write_new_markets = config.get("enabled_write_new_markets")
+            self._enabled_write_new_markets_to_env = config.get("enabled_write_new_markets_to_env")
             self._enabled_blacklist = config.get("enabled_blacklist")
             self._blacklist = config.get("blacklist")
 
@@ -155,6 +157,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
             "notify_type": "Plugin",
 
             "enabled_write_new_markets": False,
+            "enabled_write_new_markets_to_env": False,
             "enabled_blacklist": False,
             "blacklist": [],
 
@@ -198,7 +201,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
                     'value': data.get("url"),
                 })
         else:
-            for plugin_market in self.__valid_markets_list(plugin_markets=settings.PLUGIN_MARKET, mode="当前ENV配置"):
+            for plugin_market in self.__valid_markets_list(plugin_markets=settings.PLUGIN_MARKET, mode="当前系统配置"):
                 markets_list.append({
                     'title': plugin_market,
                     'value': plugin_market,
@@ -359,8 +362,24 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                             'variant': 'tonal',
                                             'style': 'white-space: pre-line;',
                                             'text': '注意：\n'
-                                                    '直接返回 "查看数据" 并不会触发刷新，只有在保存或关闭后，重新打开插件设置，才能查看刷新后的数据统计。'
-                                        }
+                                                    '直接返回 "查看数据" 并不会触发刷新，只有在保存或关闭后，重新打开插件设置，才能查看刷新后的数据统计。\n'
+                                                    '问题反馈：',
+                                        },
+                                        'content': [
+                                            {
+                                                'component': 'a',
+                                                'props': {
+                                                    'href': 'https://github.com/Aqr-K/MoviePilot-Plugins/issues/new',
+                                                    'target': '_blank'
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'u',
+                                                        'text': 'ISSUES（点击跳转）'
+                                                    }
+                                                ]
+                                            }
+                                        ]
                                     },
                                 ]
                             }
@@ -437,8 +456,8 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                                         'component': 'VSwitch',
                                                         'props': {
                                                             'model': 'enabled_write_new_markets',
-                                                            'label': '自动写入新配置',
-                                                            'hint': '开启后，出现新插件库时，将自动写入配置中',
+                                                            'label': '自动更新系统配置',
+                                                            'hint': '出现新插件库时，将自动更新系统配置中的库',
                                                             'persistent-hint': True,
                                                         }
                                                     },
@@ -448,7 +467,25 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                                 'component': 'VCol',
                                                 'props': {
                                                     'cols': 12,
-                                                    'md': 5,
+                                                    'md': 4,
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VSwitch',
+                                                        'props': {
+                                                            'model': 'enabled_write_new_markets_to_env',
+                                                            'label': '同步写入app.env',
+                                                            'hint': '将更新后的系统配置写入到 app.env 中',
+                                                            'persistent-hint': True,
+                                                        }
+                                                    },
+                                                ],
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 4,
                                                 },
                                                 'content': [
                                                     {
@@ -462,39 +499,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                                     },
                                                 ],
                                             },
-                                            {
-                                                'component': 'VCol',
-                                                'props': {
-                                                    'cols': 12,
-                                                    'md': 3,
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'VAlert',
-                                                        'props': {
-                                                            'type': 'warning',
-                                                            'variant': 'tonal',
-                                                            'style': 'white-space: pre-line;',
-                                                            'text': '问题反馈：'
-                                                        },
-                                                        'content': [
-                                                            {
-                                                                'component': 'a',
-                                                                'props': {
-                                                                    'href': 'https://github.com/Aqr-K/MoviePilot-Plugins/issues/new',
-                                                                    'target': '_blank'
-                                                                },
-                                                                'content': [
-                                                                    {
-                                                                        'component': 'u',
-                                                                        'text': 'ISSUES'
-                                                                    }
-                                                                ]
-                                                            }
-                                                        ]
-                                                    }
-                                                ]
-                                            }
+
                                         ]
                                     },
                                     {
@@ -518,7 +523,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                                             'items': markets_list,
                                                             'clearable': True,
                                                             'multiple': True,
-                                                            'placeholder': '支持下拉选择，支持手动输入，输入的地址将不会被写入到app.env中',
+                                                            'placeholder': '支持下拉选择，支持手动输入，输入的地址将不会被更新到 系统配置 与 app.env 中',
                                                             'hint': '选中的插件库将被添加到黑名单中，不会自动添加；已写入env的黑名单插件库，也会在下次运行写入时移除；只移除插件库，插件本身不会被卸载',
                                                             'persistent-hint': True,
                                                             'no-data-text': '没有从 wiki 与 当前配置 中获取到数据，无法生成快捷选项，可预先手动输入需要加入黑名单的 插件库地址。',
@@ -530,6 +535,30 @@ class PluginMarketsAutoUpdate(_PluginBase):
                                             },
                                         ]
                                     },
+                                    {
+                                        'component': 'VCol',
+                                        'props': {
+                                            'cols': 12,
+                                            'md': 12,
+                                        },
+                                        'content': [
+                                            {
+                                                'component': 'VAlert',
+                                                'props': {
+                                                    'type': 'info',
+                                                    'variant': 'tonal',
+                                                    'style': 'white-space: pre-line;',
+                                                    'text': '基础设置注意事项：\n'
+                                                            '1、"自动更新临时配置" 选项，所有平台版本都可使用，重启MP后的值会失效，需要重新运行；\n'
+                                                            '2、"同步写入app.env" 选项，只有启用 "自动更新系统配置" 后才会生效；部分平台版本，可能因为各种原因，存在无法修改 "app.env" 的情况，请关闭 "同步写入app.env" 功能。\n\n'
+                                                            '补充说明：\n'
+                                                            '1、当系统启动时，会读取一次 "环境变量" 与 "app.env" 中的值并配置到 "系统配置" 中，之后再次更新 "环境变量" 与 "app.env" 时，只要没重启MP，就不会再次读取值进行 "系统配置" 的更新。\n'
+                                                            '2、只有写入到 "app.env" 中的值，才会在重启后，直接被MP重新读取并生效；\n'
+                                                            '3、未写入到 "app.env" 中的值，重启后会恢复到原有 "环境变量" 或 "app.env" 的值；只有等本插件再次运行后才会更新 "系统配置"。'
+                                                },
+                                            }
+                                        ]
+                                    }
                                 ]
                             },
                             {
@@ -1073,8 +1102,12 @@ class PluginMarketsAutoUpdate(_PluginBase):
                     wiki_markets_list=wiki_markets_list)
                 # 获取需要写入app.env的插件库
                 if self._enabled_write_new_markets:
-                    self.write_markets_to_env(wiki_markets_list=wiki_markets_list,
-                                              other_markets_list=other_markets_list)
+                    in_blacklist_markets_list = self.write_markets_to_settings(wiki_markets_list=wiki_markets_list,
+                                                                               other_markets_list=other_markets_list)
+                # 不需要写入app.env的插件库，也判断是否在黑名单中
+                else:
+                    _, in_blacklist_markets_list = self.__get_write_markets(wiki_markets_list=wiki_markets_list,
+                                                                            other_markets_list=other_markets_list)
             except Exception as e:
                 logger.error(f'{"手动" if manual else "定时"}任务运行失败 - {e}')
                 if manual:
@@ -1086,6 +1119,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
                 # 更新 data_list
                 self.__update_and_save_statistic_info(wiki_markets_list=wiki_markets_list,
                                                       other_markets_list=other_markets_list,
+                                                      in_blacklist_markets_list=in_blacklist_markets_list,
                                                       time=time)
             finally:
                 self._onlyonce = False
@@ -1208,7 +1242,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
         """
         try:
             # 提取已经写入env的所有插件库
-            env_markets_list = self.__valid_markets_list(plugin_markets=settings.PLUGIN_MARKET, mode="当前ENV配置")
+            env_markets_list = self.__valid_markets_list(plugin_markets=settings.PLUGIN_MARKET, mode="当前系统配置")
             # 提取已经写入的不在官方库的第三方插件库
             other_markets_list = self.__get_other_markets(env_markets_list=env_markets_list,
                                                           wiki_markets_list=wiki_markets_list)
@@ -1348,67 +1382,74 @@ class PluginMarketsAutoUpdate(_PluginBase):
 
     # 写入app.env
 
-    def write_markets_to_env(self, wiki_markets_list, other_markets_list):
+    def write_markets_to_settings(self, wiki_markets_list, other_markets_list):
         try:
-            # 提取需要写入的插件库
-            write_markets_list = self.__get_write_markets(wiki_markets_list=wiki_markets_list,
-                                                          other_markets_list=other_markets_list)
-            # 写入app.env
-            status = self.__update_env(write_markets_list=write_markets_list)
+            # 提取需要更新的插件库
+            write_markets_list, in_blacklist_markets_list = self.__get_write_markets(wiki_markets_list=wiki_markets_list,
+                                                                                     other_markets_list=other_markets_list)
+            # 更新配置
+            self.__update_settings(write_markets_list=write_markets_list)
         except Exception as e:
             raise Exception(f"写入app.env失败 - {e}")
         else:
-            # 只有成功，才发送通知
-            if status:
-                logger.info(f"成功覆盖式写入 {len(write_markets_list)} 个插件库地址到app.env")
-                if self._enabled_write_notify:
-                    self.__send_message(title=self.plugin_name,
-                                        text=f"成功覆盖式写入 {len(write_markets_list)} 个插件库地址到app.env")
-            else:
-                logger.info("当前插件库地址与本地配置一致，无需更新")
+            return in_blacklist_markets_list
 
-    def __get_write_markets(self, wiki_markets_list, other_markets_list):
+    def __get_write_markets(self, wiki_markets_list, other_markets_list) -> [Optional[list], Optional[list]]:
         """
         生成最后需要更新到env中的值的列表
         """
-        all_markets_list = list(set(wiki_markets_list) | set(other_markets_list))
+        all_markets_list = list(dict.fromkeys(wiki_markets_list + other_markets_list))
         try:
             if self._enabled_blacklist and self._blacklist:
-                blacklist = self.__valid_markets_list(self._blacklist, mode="插件写入黑名单")
-                write_markets_list = [url for url in all_markets_list if url not in blacklist]
-                return write_markets_list
+                blacklist_markets_list = self.__valid_markets_list(self._blacklist, mode="插件写入黑名单")
+                write_markets_list = []
+                in_blacklist_markets_list = []
+                for url in all_markets_list:
+                    if url not in blacklist_markets_list:
+                        write_markets_list.append(url)
+                    else:
+                        in_blacklist_markets_list.append(url)
+                return write_markets_list, in_blacklist_markets_list
             else:
-                return all_markets_list
+                return all_markets_list, []
         except Exception as e:
             logger.error(f"黑名单失败配置运行失败，默认不使用黑名单筛选 - {e}")
-            return all_markets_list
+            return all_markets_list, []
 
-    def __update_env(self, write_markets_list):
+    def __update_settings(self, write_markets_list):
         """
-        更新env
+        更新配置
         """
         try:
             # 一致，无需更新
             if Counter(write_markets_list) == Counter(
-                    self.__valid_markets_list(settings.PLUGIN_MARKET, mode="当前ENV配置")):
+                    self.__valid_markets_list(settings.PLUGIN_MARKET, mode="当前系统配置")):
                 write_markets_str = None
-                status = False
+                logger.info("当前插件库地址与本地配置一致，无需更新")
             # 不一致，更新
             else:
                 if isinstance(write_markets_list, list):
                     write_markets_str = ",".join(write_markets_list)
-                    set_key(dotenv_path=self.env_path, key_to_set="PLUGIN_MARKET", value_to_set=write_markets_str)
-                    status = True
+                    if self._enabled_write_new_markets:
+                        settings.PLUGIN_MARKET = write_markets_str
+                        if self._enabled_write_new_markets_to_env:
+                            set_key(dotenv_path=self.env_path, key_to_set="PLUGIN_MARKET", value_to_set=write_markets_str)
+
+                            logger.info(f"成功覆盖式写入 {len(write_markets_list)} 个插件库地址到app.env")
+                            if self._enabled_write_notify:
+                                self.__send_message(title=self.plugin_name,
+                                                    text=f"成功覆盖式写入 {len(write_markets_list)} 个插件库地址到app.env")
+                        else:
+                            logger.info(f"成功覆盖式写入 {len(write_markets_list)} 个插件库地址到系统配置中，但未写入到app.env中")
+                            if self._enabled_write_notify:
+                                self.__send_message(title=self.plugin_name,
+                                                    text=f"成功覆盖式写入 {len(write_markets_list)} 个插件库地址到系统配置中，但未写入到app.env中")
                 else:
                     raise ValueError("写入env的值，格式不合法")
         except Exception as e:
             raise Exception(e)
         else:
-            if write_markets_str:
-                # 更新settings.PLUGIN_MARKET
-                settings.PLUGIN_MARKET = write_markets_str
-                self._update_other_plugins(write_markets_str=write_markets_str)
-            return status
+            self._update_other_plugins(write_markets_str=write_markets_str)
 
     # 同步显示
 
@@ -1495,17 +1536,16 @@ class PluginMarketsAutoUpdate(_PluginBase):
 
     # 统计
 
-    def __update_and_save_statistic_info(self, wiki_markets_list, other_markets_list, time):
+    def __update_and_save_statistic_info(self, wiki_markets_list, other_markets_list, in_blacklist_markets_list, time):
         """
         更新并保存统计信息
         """
         statistic_info = self.__get_statistic_info()
-        all_markets_list = list(set(wiki_markets_list) | set(other_markets_list))
+        all_markets_list = list(dict.fromkeys(wiki_markets_list + other_markets_list))
 
         other_markets = []
         wiki_markets = []
-        # 直接env配置的库进行对比筛查
-        env_markets_list = self.__valid_markets_list(settings.PLUGIN_MARKET, mode="当前ENV配置")
+        env_markets_list = self.__valid_markets_list(settings.PLUGIN_MARKET, mode="当前系统配置")
         for url in env_markets_list:
             if not url.endswith("/"):
                 url += "/"
@@ -1521,18 +1561,17 @@ class PluginMarketsAutoUpdate(_PluginBase):
         # 非官方库数量
         other_markets_count = len(other_markets_list)
 
-        # 黑名单库数量
-        blacklisted_markets_count = len(self.__valid_markets_list(self._blacklist, mode="插件写入黑名单"))
-        # 在总库在黑名单中的库数量
-        in_blacklist_markets_count = len(
-            [url for url in all_markets_list if url in self.__valid_markets_list(self._blacklist)])
-
         # env写入库数量
         env_markets_count = len(env_markets_list)
         # 已写入的官方库数量
         in_env_wiki_markets_count = len(wiki_markets)
         # 已写入的非官方库数量
         in_env_other_markets_count = len(other_markets)
+
+        # 黑名单库数量
+        blacklisted_markets_count = len(self.__valid_markets_list(self._blacklist, mode="插件写入黑名单"))
+        # 在总库在黑名单中的库数量
+        in_blacklist_markets_count = len(in_blacklist_markets_list)
 
         # 头部统计信息
         statistic_info.update({
@@ -1603,6 +1642,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
             "notify_type": self._notify_type,
 
             "enabled_write_new_markets": self._enabled_write_new_markets,
+            "enabled_write_new_markets_to_env": self._enabled_write_new_markets_to_env,
             "enabled_blacklist": self._enabled_blacklist,
             "blacklist": self._blacklist,
 
