@@ -27,7 +27,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
     # 插件图标
     plugin_icon = "upload.png"
     # 插件版本
-    plugin_version = "1.8.1"
+    plugin_version = "1.9"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -1426,10 +1426,19 @@ class PluginMarketsAutoUpdate(_PluginBase):
         """
         try:
             # 一致，无需更新
-            if Counter(write_markets_list) == Counter(
-                    self.__valid_markets_list(settings.PLUGIN_MARKET, mode="当前系统配置")):
+            if (self._enabled_write_new_markets_to_env and
+                    Counter(write_markets_list) ==
+                    Counter(self.__valid_markets_list(settings.PLUGIN_MARKET, mode="当前系统配置")) ==
+                    Counter(dotenv_values(self.env_path).get("PLUGIN_MARKET", "").split(","))):
                 write_markets_str = None
-                logger.info("当前插件库地址与本地配置一致，无需更新")
+                logger.info("当前预更新的插件库地址、当前系统配置、ENV写入地址三项一致，无需更新")
+
+            elif (self._enabled_write_new_markets_to_env is False and
+                  Counter(write_markets_list) ==
+                  Counter(self.__valid_markets_list(settings.PLUGIN_MARKET, mode="当前系统配置"))):
+                write_markets_str = None
+                logger.info("当前预更新的插件库地址与当前系统配置一致，无需更新")
+
             # 不一致，更新
             else:
                 if isinstance(write_markets_list, list):
@@ -1453,32 +1462,33 @@ class PluginMarketsAutoUpdate(_PluginBase):
         except Exception as e:
             raise Exception(e)
         else:
-            if write_markets_str:
-                self._update_other_plugins(write_markets_str=write_markets_str)
+            self._update_other_plugins()
 
     # 同步显示
 
-    def _update_other_plugins(self, write_markets_str):
+    def _update_other_plugins(self):
         """
         同步并更新其他插件
         """
         try:
+            write_markets_str = settings.PLUGIN_MARKET
             flag, installed_plugins = self.__check_settings_plugins_installed()
             if flag:
-                logger.info("正在准备同步更新显示")
+                logger.debug("正在准备检查同步更新显示")
                 for plugin_id, plugin_name in (item for plugin in installed_plugins for item in plugin.items()):
                     config = self.get_config(plugin_id=plugin_id) or {}
                     plugin_market = config.get("PLUGIN_MARKET", "")
                     # 只有在内容变更时，才更新配置
-                    if write_markets_str != plugin_market:
+                    if Counter(write_markets_str.split(",")) != Counter(plugin_market.split(",")):
                         config["PLUGIN_MARKET"] = write_markets_str
                         self.update_config(config=config, plugin_id=plugin_id)
                         self.__reload_plugin(plugin_id=plugin_id)
-                        logger.info(f"【{plugin_name}】更新完成")
+                        logger.debug(f"【{plugin_name}】检查完成")
                     else:
-                        logger.info(f"【{plugin_name}】中的值与当前插件库地址一致，无需更新")
+                        logger.debug(f"【{plugin_name}】中的值与当前系统配置一致，无需更新")
+                logger.info("同步显示检查与更新完成")
         except Exception as e:
-            logger.error(f"同步显示更新任务失败 - {e}")
+            logger.error(f"同步显示检查与更新失败 - {e}")
 
     def __check_settings_plugins_installed(self) -> (bool, list):
         """
