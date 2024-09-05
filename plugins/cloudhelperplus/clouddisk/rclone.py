@@ -63,7 +63,7 @@ class RclonePanHelper(CloudDisk):
                         from app.modules.filemanager.storages.rclone import Rclone as Helper
                         from app.schemas.types import StorageSchema as ParamsKey
                     else:
-                        raise Exception(f"不支持的系统版本【v{self.app_version}】")
+                        raise Exception(f"不支持的系统版本【{self.app_version}】")
                     self.helper = Helper()
                     self.params_key = ParamsKey
                     return True
@@ -82,8 +82,9 @@ class RclonePanHelper(CloudDisk):
         """
         # 默认配置
         default_config = {}
-        data = self.query_params(comp_name=self.comp_name, system_config_key=self.system_config_key)
-        self.config_default["params"] = self.valid_auth_params_str(auth_params=data)
+        if self.authorization:
+            data = self.query_params(comp_name=self.comp_name, system_config_key=self.system_config_key)
+            self.config_default["params"] = self.valid_auth_params_str(auth_params=data)
         # 合并默认配置
         default_config.update(self.config_default)
         # 允许运行
@@ -150,7 +151,7 @@ class RclonePanHelper(CloudDisk):
         if Version(self.app_version) >= Version("v2.0.0"):
             return self.params_key.U115
         else:
-            raise Exception(f"不支持的系统版本【v{self.app_version}】")
+            raise Exception(f"不支持的系统版本【{self.app_version}】")
 
     def check_params(self):
         """

@@ -69,7 +69,7 @@ class U115PanHelper(CloudDisk):
                         from app.schemas.types import StorageSchema as ParamsKey
 
                     else:
-                        raise Exception(f"不支持的系统版本【v{self.app_version}】")
+                        raise Exception(f"不支持的系统版本【{self.app_version}】")
                     self.helper = Helper()
                     self.params_key = ParamsKey
                     return True
@@ -165,7 +165,7 @@ class U115PanHelper(CloudDisk):
         elif Version(self.app_version) >= Version("v2.0.0"):
             return self.params_key.U115
         else:
-            raise Exception(f"不支持的系统版本【v{self.app_version}】")
+            raise Exception(f"不支持的系统版本【{self.app_version}】")
 
     def check_params(self):
         """
@@ -176,7 +176,7 @@ class U115PanHelper(CloudDisk):
         elif Version(self.app_version) >= Version("v2.0.0"):
             return self.helper.list()
         else:
-            raise Exception(f"不支持的系统版本【v{self.app_version}】")
+            raise Exception(f"不支持的系统版本【{self.app_version}】")
 
     @property
     def __channel_id_map(self):
