@@ -88,8 +88,9 @@ class U115PanHelper(CloudDisk):
         """
         # 默认配置
         default_config = {}
-        data = self.query_params(comp_name=self.comp_name, system_config_key=self.system_config_key)
-        self.config_default["params"] = self.valid_auth_params_str(auth_params=data)
+        if self.authorization:
+            data = self.query_params(comp_name=self.comp_name, system_config_key=self.system_config_key)
+            self.config_default["params"] = self.valid_auth_params_str(auth_params=data)
         # 合并默认配置
         default_config.update(self.config_default)
         # 允许运行
