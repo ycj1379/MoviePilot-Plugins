@@ -37,7 +37,7 @@ class CloudHelperPlus(_PluginBase):
     # 加载顺序
     plugin_order = 11
     # 可使用的用户级别
-    auth_level = 1
+    auth_level = 2
 
     # 注册组件
     __module_path = "app.plugins.cloudhelperplus.clouddisk"
