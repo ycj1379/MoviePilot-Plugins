@@ -195,7 +195,7 @@ class AliyunPanHelper(CloudDisk):
         elif Version(self.app_version) >= Version("v2.0.0"):
             return self.helper.list()
         else:
-            raise Exception(f"不支持的系统版本{self.app_version}】")
+            raise Exception(f"不支持的系统版本【{self.app_version}】")
 
     def extra_info(self) -> str:
         """

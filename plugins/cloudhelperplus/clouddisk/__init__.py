@@ -144,6 +144,8 @@ class CloudDisk(ABC):
         config = self.get_config() or {}
         config_copy = config.copy()
         for key, value in config_default.items():
+            if key == "params":
+                config_copy[key] = value
             if not key or key in config_copy.keys():
                 continue
             config_copy[key] = value
@@ -466,13 +468,10 @@ class CloudDisk(ABC):
         """
         if not auth_params:
             return ""
-        elif isinstance(auth_params, dict):
-            auth_params_str = ";".join([f"{key}={value}" for key, value in auth_params.items()])
-            return auth_params_str
-        elif isinstance(auth_params, str):
-            return auth_params
-        else:
-            raise Exception("传入的认证参数格式错误，无法转换")
+        str_data = ""
+        for k, v in auth_params.items():
+            str_data += f"{k}={v}; "
+        return str_data.strip()
 
     def get_params_value(self, comp_name, system_config_key, key):
         """

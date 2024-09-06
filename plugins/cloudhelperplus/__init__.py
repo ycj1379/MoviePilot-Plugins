@@ -1,6 +1,7 @@
 import ast
 import copy
 import inspect
+import json
 import os
 from datetime import datetime
 from functools import partial
@@ -26,7 +27,7 @@ class CloudHelperPlus(_PluginBase):
     # 插件图标
     plugin_icon = "Alidrive_A.png"
     # 插件版本
-    plugin_version = "2.1.1"
+    plugin_version = "2.2"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -224,7 +225,6 @@ class CloudHelperPlus(_PluginBase):
             comp_form_data = self.__get_comp_form_data(comp_obj=comp_obj)
             if comp_form_data:
                 config_default.update(comp_form_data)
-
         # 头部全局元素
         header_elements = [
             {
@@ -1077,13 +1077,10 @@ class CloudHelperPlus(_PluginBase):
         """
         if not value:
             return ""
-        elif isinstance(value, dict):
-            value = ";".join([f"{key}={value}" for key, value in value.items()])
-            return value
-        elif isinstance(value, str):
-            return value
-        else:
-            raise Exception("传入的认证参数格式错误，无法转换")
+        str_data = ""
+        for k, v in value.items():
+            str_data += f"{k}={v}; "
+        return str_data.strip()
 
     @staticmethod
     def __valid_auth_params_dict(value) -> Optional[dict]:
@@ -1092,19 +1089,22 @@ class CloudHelperPlus(_PluginBase):
         """
         if not value:
             return {}
-
+        value = value.strip()
         if isinstance(value, str):
-            if value.endswith(";"):
-                value = value[:-1]
-            # if value.startswith("{") and value.endswith("}"):
-            #     # 去除换行符
-            #     value = value.replace("\n", "")
-            #     # 更改为字典
-            #     value = json.loads(value)
-            #     return value
-            value = {k: v for k, v in (item.split("=") for item in value.split(";") if item)}
-            return value
-        elif isinstance(value, dict):
+            pairs = value.split(';')
+            data_dict = {}
+            for pair in pairs:
+                key_value = pair.split('=')
+                if len(key_value) == 2:
+                    key = key_value[0].strip()
+                    value = key_value[1].strip()
+                    try:
+                        # 尝试将值转换为合适的数据类型（如整数、布尔值等）
+                        data_dict[key] = json.loads(value)
+                    except json.JSONDecodeError:
+                        data_dict[key] = value
+            return data_dict
+        elif value.startswith('{') and value.endswith('}'):
             return value
         else:
             raise Exception("传入的参数格式错误，无法转换")
