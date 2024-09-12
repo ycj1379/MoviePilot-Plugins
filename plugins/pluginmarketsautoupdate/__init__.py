@@ -1235,7 +1235,8 @@ class PluginMarketsAutoUpdate(_PluginBase):
                 logger.info(f'{msg} - 共获取到 {len(new_markets_list)} 个插件库地址')
                 if self._enabled_update_notify:
                     self.__send_message(title=self.plugin_name,
-                                        text=f"{msg} - 共获取到 {len(new_markets_list)} 个插件库地址")
+                                        text=f"{msg} - 共获取到 {len(new_markets_list)} 个插件库地址",
+                                        mtype=self._notify_type)
             return new_markets_list
 
     # 提取已写入的插件库与第三方插件库
@@ -1451,12 +1452,14 @@ class PluginMarketsAutoUpdate(_PluginBase):
                             logger.info(f"成功覆盖式写入 {len(write_markets_list)} 个插件库地址到app.env")
                             if self._enabled_write_notify:
                                 self.__send_message(title=self.plugin_name,
-                                                    text=f"成功覆盖式写入 {len(write_markets_list)} 个插件库地址到app.env")
+                                                    text=f"成功覆盖式写入 {len(write_markets_list)} 个插件库地址到app.env",
+                                                    mtype=self._notify_type)
                         else:
                             logger.info(f"成功覆盖式写入 {len(write_markets_list)} 个插件库地址到系统配置中，但未写入到app.env中")
                             if self._enabled_write_notify:
                                 self.__send_message(title=self.plugin_name,
-                                                    text=f"成功覆盖式写入 {len(write_markets_list)} 个插件库地址到系统配置中，但未写入到app.env中")
+                                                    text=f"成功覆盖式写入 {len(write_markets_list)} 个插件库地址到系统配置中，但未写入到app.env中",
+                                                    mtype=self._notify_type)
                 else:
                     raise ValueError("写入env的值，格式不合法")
         except Exception as e:
@@ -1547,7 +1550,7 @@ class PluginMarketsAutoUpdate(_PluginBase):
         """
         if not mtype:
             mtype = NotificationType.Plugin
-        self.post_message(mtype=mtype, title=title, text=text)
+        self.post_message(mtype=getattr(NotificationType, mtype, NotificationType.Plugin.value), title=title, text=text)
 
     # 统计
 

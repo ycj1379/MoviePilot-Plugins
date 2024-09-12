@@ -1,6 +1,7 @@
 import inspect
 import os
 from abc import ABC, abstractmethod
+from functools import partial
 from typing import Any, Tuple, List, Dict, Optional
 
 from app.core.event import EventManager
@@ -11,6 +12,8 @@ from app.log import logger
 from app.plugins import _PluginBase, PluginChian
 from app.schemas.types import NotificationType
 from version import APP_VERSION
+
+from packaging.version import Version
 
 
 class CloudDisk(ABC):
@@ -34,14 +37,16 @@ class CloudDisk(ABC):
     # 配置相关
     # 组件缺省配置
     config_default: Dict[str, Any] = {
-        # "notify_enabled": False,
+        # "notify_level": "err",
         # "notify_type": "Plugin",
         # "corn": 0,
         # "params": "",
+        # "notify_methods": [],
     }
 
     helper = None
-    params_key = None
+    systemconfig_key = None
+    systemconfig_method = None
     authorization = False
 
     def __init__(self, plugin: _PluginBase):
@@ -124,7 +129,8 @@ class CloudDisk(ABC):
                 continue
             if stack.function != function_name:
                 continue
-            if stack.filename.endswith(f"{package_path}.py") or stack.filename.endswith(f"{package_path}{os.sep}__init__.py"):
+            if stack.filename.endswith(f"{package_path}.py") or stack.filename.endswith(
+                    f"{package_path}{os.sep}__init__.py"):
                 return True
         return False
 
@@ -132,7 +138,8 @@ class CloudDisk(ABC):
         """
         判断调用栈是否包含“插件配置保存”接口
         """
-        return self.check_stack_contain_method(package_name='app.api.endpoints.plugin', function_name='set_plugin_config')
+        return self.check_stack_contain_method(package_name='app.api.endpoints.plugin',
+                                               function_name='set_plugin_config')
 
     def save_default_config(self):
         """
@@ -170,42 +177,41 @@ class CloudDisk(ABC):
         pass
 
     @abstractmethod
-    def system_config_key(self):
+    def check_params(self) -> bool:
         """
-        数据库key
-        """
-        pass
-
-    @abstractmethod
-    def check_params(self):
-        """
-        认证活性检测
+        检查认证
         """
         pass
 
     @abstractmethod
-    def extra_info(self):
+    def extra_info(self) -> Optional[str]:
         """
-        额外信息获取
+        获取额外信息
         """
         pass
 
     """ 前端UI预设 """
 
     @staticmethod
-    def __build_notify_enabled_switch_element() -> List[dict]:
+    def __build_notify_level_select_element() -> dict:
         """
         构造定时检测汇报开关元素
         """
-        return [{
-            'component': 'VSwitch',
+        return {
+            'component': 'VSelect',
             'props': {
-                'model': f'notify_enabled',
-                'label': f'启用消息通知',
-                'hint': '允许汇报操作结果',
+                'model': 'notify_level',
+                'label': '发送消息汇报',
+                'hint': '发送频率',
                 'persistent-hint': True,
+                'active': True,
+                'items': [
+                    {'title': '不发送汇报', 'value': 'off', },
+                    {'title': '发送全部汇报', 'value': 'all', },
+                    {'title': '仅异常时汇报', 'value': 'err', },
+                ],
             }
-        }]
+        }
 
     @staticmethod
     def __build_notify_type_select_element() -> dict:
@@ -256,7 +262,7 @@ class CloudDisk(ABC):
         构造时间选择器元素
         """
         return {
-            'component': 'VCombobox',
+            'component': 'VSelect',
             'props': {
                 'model': 'corn',
                 'label': f'定时检测',
@@ -265,6 +271,54 @@ class CloudDisk(ABC):
                 'active': True,
                 'placeholder': '不启用定时检测',
                 'items': self.__build_corn_select_items,
+            }
+        }
+
+    @staticmethod
+    def __build_api_notify_enable_switch_element() -> dict:
+        """
+        构造API通知开关元素
+        """
+        return {
+            'component': 'VSwitch',
+            'props': {
+                'model': 'api_notify_enable',
+                'label': '启用API消息推送',
+                'hint': '允许推送API调用结果到消息汇报',
+                'persistent-hint': True,
+            }
+        }
+
+    @property
+    def __build_notify_methods_select_items(self) -> List[dict]:
+        """
+        构造时间选择选项
+        """
+        return [
+            {'title': '查询认证', 'value': "query_params"},
+            {'title': '更新认证', 'value': "update_params"},
+            {'title': '删除认证', 'value': "delete_params"},
+            {'title': '认证活性检测', 'value': "check_params"},
+            {'title': '获取额外信息', 'value': "extra_info"},
+        ]
+
+    def __build_notify_methods_select_element(self) -> dict:
+        """
+        构造时间选择器元素
+        """
+        return {
+            'component': 'VSelect',
+            'props': {
+                'model': 'notify_methods',
+                'label': '允许汇报的调用方法',
+                'hint': '允许汇报的调用方法，支持多选，API消息推送也受该项控制',
+                'persistent-hint': True,
+                'active': True,
+                'multiple': True,
+                'chips': True,
+                'clearable': True,
+                'placeholder': '留空，默认允许全部',
+                'items': self.__build_notify_methods_select_items,
             }
         }
 
@@ -287,22 +341,10 @@ class CloudDisk(ABC):
             }
         }
 
-    def build_notify_type_select_col_element(self, md=4) -> dict:
+    @staticmethod
+    def build_col_element(element, md=4) -> dict:
         """
-        构造定时检测汇报类型下拉选择Col元素
-        """
-        return {
-            'component': 'VCol',
-            'props': {
-                'cols': 12,
-                'md': md,
-            },
-            'content': [self.__build_notify_type_select_element()]
-        }
-
-    def build_corn_select_col_element(self, md=4) -> dict:
-        """
-        构造定时任务下拉选择Col元素
+        构造Col元素
         """
         return {
             'component': 'VCol',
@@ -310,33 +352,7 @@ class CloudDisk(ABC):
                 'cols': 12,
                 'md': md,
             },
-            'content': [self.__build_corn_select_element()]
-        }
-
-    def build_notify_enabled_switch_col_element(self, md=4) -> dict:
-        """
-        构造定时检测汇报开关col元素
-        """
-        return {
-            'component': 'VCol',
-            'props': {
-                'cols': 12,
-                'md': md,
-            },
-            'content': self.__build_notify_enabled_switch_element()
-        }
-
-    def build_cookie_textarea_col_element(self, md=12, placeholder=None) -> dict:
-        """
-        构造Cookie文本框Col元素
-        """
-        return {
-            'component': 'VCol',
-            'props': {
-                'cols': 12,
-                'md': md,
-            },
-            'content': [self.__build_cookie_textarea_element(placeholder=placeholder)]
+            'content': [element()]
         }
 
     def build_base_settings_select_and_switch_row_element(self, md=4) -> dict:
@@ -349,9 +365,11 @@ class CloudDisk(ABC):
                 'align': 'center'
             },
             'content': [
-                self.build_notify_enabled_switch_col_element(md=md),
-                self.build_notify_type_select_col_element(md=md),
-                self.build_corn_select_col_element(md=md),
+                self.build_col_element(self.__build_notify_level_select_element, md=md),
+                self.build_col_element(self.__build_notify_type_select_element, md=md),
+                self.build_col_element(self.__build_corn_select_element, md=md),
+                self.build_col_element(self.__build_api_notify_enable_switch_element, md=md),
+                self.build_col_element(self.__build_notify_methods_select_element, md=md if md * 2 > 12 else md * 2),
             ]
         }
 
@@ -365,7 +383,7 @@ class CloudDisk(ABC):
                 'align': 'center'
             },
             'content': [
-                self.build_cookie_textarea_col_element(md=md, placeholder=placeholder)
+                self.build_col_element(partial(self.__build_cookie_textarea_element, placeholder=placeholder), md=md),
             ]
         }
 
@@ -449,12 +467,18 @@ class CloudDisk(ABC):
 
     """ 初始化显示 """
 
-    def query_params(self, comp_name, system_config_key):
+    def query_params(self, comp_name, comp_systemconfig_method, comp_systemconfig_key):
         """
         查询params - 用于初始化显示
         """
         try:
-            return self.systemconfig.get(system_config_key)
+            if Version(self.app_version) < Version("v2.0.0"):
+                result = comp_systemconfig_method.get(comp_systemconfig_key)
+            elif Version(self.app_version) >= Version("v2.0.0"):
+                result = comp_systemconfig_method.get_storage(comp_systemconfig_key)
+            else:
+                raise Exception(f"不支持的系统版本【{self.app_version}】")
+            return result
         except Exception as e:
             logger.error(f"【{comp_name}】认证参数查询失败 - {str(e)}")
             return None
@@ -470,14 +494,16 @@ class CloudDisk(ABC):
             return ""
         str_data = ""
         for k, v in auth_params.items():
-            str_data += f"{k}={v}; "
+            str_data += f"{k}={v};"
         return str_data.strip()
 
-    def get_params_value(self, comp_name, system_config_key, key):
+    def get_params_value(self, comp_name, comp_systemconfig_method, comp_systemconfig_key, key):
         """
-        获取认证参数值
+        获取认证参数中的值
         """
-        params = self.query_params(comp_name=comp_name, system_config_key=system_config_key)
+        params = self.query_params(comp_name=comp_name,
+                                   comp_systemconfig_method=comp_systemconfig_method,
+                                   comp_systemconfig_key=comp_systemconfig_key)
         if not params:
             return "未绑定"
         value = params.get(key) or "无法获取"

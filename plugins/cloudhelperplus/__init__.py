@@ -8,6 +8,7 @@ from functools import partial
 from typing import OrderedDict, Dict, Any, List, Tuple, Optional, Type, Union
 from collections import OrderedDict as collections_OrderedDict
 
+from packaging.version import Version
 
 from app import schemas
 from app.core.config import settings
@@ -17,6 +18,9 @@ from app.plugins import _PluginBase
 
 from app.plugins.cloudhelperplus.clouddisk import CloudDisk
 from app.schemas import NotificationType
+import threading
+
+Lock = threading.Lock()
 
 
 class CloudHelperPlus(_PluginBase):
@@ -27,7 +31,7 @@ class CloudHelperPlus(_PluginBase):
     # 插件图标
     plugin_icon = "Alidrive_A.png"
     # 插件版本
-    plugin_version = "2.2"
+    plugin_version = "2.3"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -71,7 +75,7 @@ class CloudHelperPlus(_PluginBase):
         self.__register_comp()
         # 当通过页面操作保存配置时
         if self.__check_stack_contain_save_config_request():
-            logger.info(f"通过前端执行保存")
+            logger.info(f"正在通过前端执行保存")
             self.__apply_params_config(config=self.__config)
             # 重新保存配置
             self.__fix_config(config=config, mode=True)
@@ -385,7 +389,7 @@ class CloudHelperPlus(_PluginBase):
                     continue
                 key = self.__get_key_prefix(comp_key) + "params"
                 # 替换成数据库缓存
-                _, _, params = self.query_params(comp_obj=comp_obj)
+                _, _, params = self.query_params(comp_obj=comp_obj, mode="silence")
                 if params:
                     params = self.__valid_auth_params_str(value=params)
                 config_copy[key] = params
@@ -435,7 +439,8 @@ class CloudHelperPlus(_PluginBase):
         config = self.__config or {}
         if not config and not comp_config:
             return False
-        config = dict(filter(lambda item: item and not item[0].startswith(self.__get_key_prefix(comp_key)), config.items()))
+        config = dict(
+            filter(lambda item: item and not item[0].startswith(self.__get_key_prefix(comp_key)), config.items()))
         if comp_config:
             for comp_config_key, value in comp_config.items():
                 if not comp_config_key:
@@ -464,7 +469,8 @@ class CloudHelperPlus(_PluginBase):
                 if params:
                     # 格式转换
                     params = self.__valid_auth_params_dict(value=params)
-                status, msg, data = self.get_comp_obj_to_method(comp_key=comp_key, method="update_params", params=params)
+                status, msg, data = self.get_comp_obj_to_method(comp_key=comp_key, method="update_params",
+                                                                params=params)
                 logger.info(msg) if status else logger.error(msg)
         except Exception as e:
             logger.error(f"保存认证参数异常 - {str(e)}", exc_info=True)
@@ -713,11 +719,11 @@ class CloudHelperPlus(_PluginBase):
 
     """ 封装统计UI """
 
-    def __save_page_data(self, comp_obj):
+    def __save_page_data(self, comp_obj: CloudDisk):
         """
         保存页面数据
         """
-        query_params_status, _, query_params_data = self.query_params(comp_obj=comp_obj)
+        query_params_status, _, query_params_data = self.query_params(comp_obj=comp_obj, mode="silence")
         # 初始化
         status, extra_info = None, None
         # 查询失败
@@ -728,7 +734,7 @@ class CloudHelperPlus(_PluginBase):
             # 认证存在
             if query_params_data:
                 # 活性检测
-                check_params_status, msg, _ = self.check_params(comp_obj=comp_obj)
+                check_params_status, msg, _ = self.check_params(comp_obj=comp_obj, mode="ui")
                 # 可以检测有效性
                 if check_params_status:
                     status = True if msg.endswith('有效') else False
@@ -738,7 +744,7 @@ class CloudHelperPlus(_PluginBase):
 
                 if extra_info is not False:
                     # 额外参数提取
-                    extra_info_status, _, extra_info_data = self.extra_info(comp_obj=comp_obj)
+                    extra_info_status, _, extra_info_data = self.extra_info(comp_obj=comp_obj, mode="ui")
                     # 可以提取
                     if extra_info_status:
                         extra_info = extra_info_data
@@ -893,7 +899,7 @@ class CloudHelperPlus(_PluginBase):
         # 非更新，清除无用的认证参数
         if method != 'update_params':
             params = None
-        status, message, data = self.get_comp_obj_to_method(comp_key=cloud_id, method=method, params=params)
+        status, message, data = self.get_comp_obj_to_method(comp_key=cloud_id, method=method, params=params, mode="api")
         if isinstance(status, int):
             status = True if status >= 0 else False
         if data and isinstance(data, str):
@@ -902,7 +908,7 @@ class CloudHelperPlus(_PluginBase):
 
     """ 数据处理 """
 
-    def get_comp_obj_to_method(self, comp_key, method, params: Union[list, dict, bool, int, str] = None):
+    def get_comp_obj_to_method(self, comp_key, method, params: Union[list, dict, bool, int, str] = None, mode="ui"):
         """
         指定组件实例化对象与调用
         """
@@ -917,72 +923,111 @@ class CloudHelperPlus(_PluginBase):
             if not comp_obj:
                 return False, f"【{comp_key}】组件实例不存在", None
 
-            if comp_key not in self.__allow_cloud:
-                return False, f"当前插件不支持使用【{comp_key}】", None
+            if comp_obj.comp_key not in self.__allow_cloud:
+                return False, f"当前插件不支持使用【{comp_obj.comp_key}】", None
+
+            if not method:
+                return False, "调用方法为空", None
+
+            if hasattr(comp_obj, method) and self.__is_pass_function(getattr(comp_obj, method)):
+                return False, f"【{comp_obj.comp_name if comp_obj.comp_name else comp_obj.comp_key}】组件方法【{method}】未实现", None
 
             target_method = getattr(self, method)
-            status, msg, data = target_method(comp_obj=comp_obj,
-                                              params=params) if method == 'update_params' else target_method(comp_obj=comp_obj)
+            status, msg, data = target_method(comp_obj=comp_obj, params=params, mode=mode) \
+                if method == 'update_params' else target_method(comp_obj=comp_obj, mode=mode)
 
         except Exception as e:
             logger.error(f"调用组件方法异常 - {str(e)}", exc_info=True)
             return False, f"调用组件方法异常 - {str(e)}", None
 
         else:
-            # 成功更新调用一次检查
+            # 成功更新，调用一次显示更新与检查
             if method == 'update_params':
                 self.__save_page_data(comp_obj=comp_obj)
-
-            # 消息推送
-            config = self.__config or {}
-            if config:
-                notify_enabled = self.__get_key_prefix(comp_key) + "notify_enabled"
-                notify_type = self.__get_key_prefix(comp_key) + "notify_type"
-                # 提取配置
-                notify_enabled = config.get(notify_enabled)
-                notify_type = config.get(notify_type)
-                # 推送
-                if notify_enabled and msg:
-                    self.post_message(mtype=getattr(NotificationType, notify_type, NotificationType.Plugin.value),
-                                      title=f"{self.plugin_name} - {comp_obj.comp_name if comp_obj.comp_name else comp_key}",
-                                      text=msg)
             return status, msg, data
 
-    def query_params(self, comp_obj) -> Tuple[bool, str, Optional[dict]]:
+    def query_params(self, comp_obj: CloudDisk, mode) -> Tuple[bool, str, Optional[dict]]:
         """
         查询params
         """
+        status, msg, data = None, None, None
         try:
-            data = self.systemconfig.get(key=comp_obj.system_config_key)
-            return True, f"【{comp_obj.comp_name}】认证参数查询成功", data if data else ''
-        except Exception as e:
-            logger.error(f"【{comp_obj.comp_name}】认证参数查询失败 - {str(e)}")
-            return False, f"【{comp_obj.comp_name}】认证参数查询失败", None
+            if Version(comp_obj.app_version) < Version("v2.0.0"):
+                data = comp_obj.systemconfig_method.get(key=comp_obj.systemconfig_key)
+            elif Version(comp_obj.app_version) >= Version("v2.0.0"):
+                data = comp_obj.systemconfig_method.get_storage(storage=comp_obj.systemconfig_key)
+            else:
+                raise Exception(f"当前版本【{comp_obj.app_version}】不支持")
+            status, msg, data = True, f"【{comp_obj.comp_name}】认证参数查询成功", data if data else ''
+            if mode != "silence":
+                logger.info(msg)
 
-    def update_params(self, comp_obj, params) -> Tuple[bool, str, Optional[dict]]:
+        except Exception as e:
+            status, msg, data = False, f"【{comp_obj.comp_name}】认证参数查询失败", None
+            if mode != "silence":
+                logger.error(f"{msg} - {str(e)}", exc_info=True)
+
+        finally:
+            self.send_notify(comp_obj=comp_obj, status=status, msg=msg, method_name='query_params', mode=mode)
+            return status, msg, data
+
+    def update_params(self, comp_obj: CloudDisk, params, mode) -> Tuple[bool, str, Optional[dict]]:
         """
         更新params
         """
-        if not isinstance(params, Optional[dict]):
-            return False, f"【{comp_obj.comp_name}】认证参数更新失败，不是合法值", None
+        status, msg, data = None, None, None
         try:
-            self.systemconfig.set(key=comp_obj.system_config_key, value=params)
-            return True, f"【{comp_obj.comp_name}】认证参数更新成功", None
-        except Exception as e:
-            logger.error(f"【{comp_obj.comp_name}】认证参数更新失败 - {str(e)}", exc_info=True)
-            return False, f"【{comp_obj.comp_name}】认证参数更新失败", None
+            if not isinstance(params, Optional[dict]):
+                status, msg, data = False, f"【{comp_obj.comp_name}】认证参数更新失败，不是合法值", None
+                if mode != "silence":
+                    logger.warning(msg)
 
-    def delete_params(self, comp_obj) -> Tuple[bool, str, Optional[dict]]:
+            else:
+                if Version(comp_obj.app_version) < Version("v2.0.0"):
+                    comp_obj.systemconfig_method.set(key=comp_obj.systemconfig_key.value,
+                                                     value=params)
+                elif Version(comp_obj.app_version) >= Version("v2.0.0"):
+                    comp_obj.systemconfig_method.set_storage(storage=comp_obj.systemconfig_key.value,
+                                                             conf=params)
+                else:
+                    raise Exception(f"当前版本【{comp_obj.app_version}】不支持")
+                status, msg, data = True, f"【{comp_obj.comp_name}】认证参数更新成功", None
+                if mode != "silence":
+                    logger.info(msg)
+
+        except Exception as e:
+            status, msg, data = False, f"【{comp_obj.comp_name}】认证参数更新失败", None
+            if mode != "silence":
+                logger.error(f"{msg} - {str(e)}", exc_info=True)
+
+        finally:
+            self.send_notify(comp_obj=comp_obj, status=status, msg=msg, method_name='update_params', mode=mode)
+            return status, msg, data
+
+    def delete_params(self, comp_obj: CloudDisk, mode) -> Tuple[bool, str, Optional[dict]]:
         """
         删除params
         """
+        status, msg, data = None, None, None
         try:
-            status = self.systemconfig.delete(key=comp_obj.system_config_key)
-            msg = f"【{comp_obj.comp_name}】认证参数删除成功" if status else f"【{comp_obj.comp_name}】认证参数删除失败"
-            return True if status else False, msg, None
+            if Version(comp_obj.app_version) < Version("v2.0.0"):
+                comp_obj.systemconfig_method.delete(key=comp_obj.systemconfig_key.value)
+            elif Version(comp_obj.app_version) >= Version("v2.0.0"):
+                comp_obj.systemconfig_method.set_storage(storage=comp_obj.systemconfig_key.value, conf={})
+            else:
+                raise Exception(f"当前版本【{comp_obj.app_version}】不支持")
+            status, msg, data = True, "【{comp_obj.comp_name}】认证参数删除成功", None
+            if mode != "silence":
+                logger.info(msg)
+
         except Exception as e:
-            logger.error(f"【{comp_obj.comp_name}】认证参数删除失败 - {str(e)}", exc_info=True)
-            return False, f"【{comp_obj.comp_name}】认证参数删除失败", None
+            status, msg, data = False, f"【{comp_obj.comp_name}】认证参数删除失败", None
+            if mode != "silence":
+                logger.error(f"{msg} - {str(e)}", exc_info=True)
+
+        finally:
+            self.send_notify(comp_obj=comp_obj, status=status, msg=msg, method_name='delete_params', mode=mode)
+            return status, msg, data
 
     @staticmethod
     def __is_pass_function(func) -> bool:
@@ -1011,36 +1056,64 @@ class CloudHelperPlus(_PluginBase):
             logger.warning(f"无法解析方法是否存在，默认方法不存在 - {str(e)}", exc_info=True)
             return False
 
-    def check_params(self, comp_obj) -> Tuple[bool, str, Optional[dict]]:
+    def check_params(self, comp_obj: CloudDisk, mode) -> Tuple[bool, str, Optional[dict]]:
         """
         检查params是否有效
         """
+        status, msg, data = None, None, None
         try:
             if not self.__is_pass_function(func=comp_obj.check_params):
-                return False, f"【{comp_obj.comp_name}】没有检测方法，无法检测", None
-            if comp_obj.check_params():
-                logger.info(f"【{comp_obj.comp_name}】认证参数检查成功 - 认证有效")
-                return True, f"【{comp_obj.comp_name}】认证参数检查成功 - 认证有效", None
-            else:
-                logger.warning(f"【{comp_obj.comp_name}】认证参数检查成功 - 认证失效")
-                return True, f"【{comp_obj.comp_name}】认证参数检查成功 - 认证失效", None
-        except Exception as e:
-            logger.error(f"【{comp_obj.comp_name}】认证检测方法调用失败 - {str(e)}", exc_info=True)
-            return False, f"【{comp_obj.comp_name}】认证检测方法调用失败 - {str(e)}", None
+                status, msg, data = False, f"【{comp_obj.comp_name}】没有检测方法，无法检测", None
+                if mode != "silence":
+                    logger.warning(msg)
 
-    def extra_info(self, comp_obj) -> Tuple[bool, str, Optional[dict]]:
+            else:
+                if comp_obj.check_params():
+                    status, msg, data = True, f"【{comp_obj.comp_name}】认证参数检查成功 - 认证有效", None
+                    if mode != "silence":
+                        logger.info(msg)
+                else:
+                    _, _, data = self.query_params(comp_obj=comp_obj, mode="silence")
+                    status, msg, data = True, f"【{comp_obj.comp_name}】认证参数检查成功 - 认证失效", data
+                    if mode != "silence":
+                        logger.warning(msg)
+
+        except Exception as e:
+            status, msg, data = False, f"【{comp_obj.comp_name}】认证检测方法调用失败", None
+            if mode != "silence":
+                logger.error(f"{msg} - {str(e)}", exc_info=True)
+
+        finally:
+            new_status = False if status and data is not None else status
+            self.send_notify(comp_obj=comp_obj, status=new_status, msg=msg, method_name='check_params', mode=mode)
+            return status, msg, data
+
+    def extra_info(self, comp_obj: CloudDisk, mode) -> Tuple[bool, str, Optional[dict]]:
         """
         额外信息
         """
+        status, msg, data = None, None, None
         try:
             if not self.__is_pass_function(func=comp_obj.extra_info):
-                logger.error(f"【{comp_obj.comp_name}】没有额外信息获取方法，无法获取")
-                return False, f"【{comp_obj.comp_name}】没有额外信息获取方法，无法获取", None
-            extra_info = comp_obj.extra_info()
-            return True, f"【{comp_obj.comp_name}】额外信息 - 【{extra_info}】", extra_info
+                status, msg, data = True, f"【{comp_obj.comp_name}】没有额外信息获取方法，无法获取", None
+                if mode != "silence":
+                    logger.warning(msg)
+
+            else:
+                extra_info = comp_obj.extra_info()
+                status, msg, data = True, f"【{comp_obj.comp_name}】额外信息 - 【{extra_info}】", extra_info
+                if mode != "silence":
+                    logger.info(msg)
+
         except Exception as e:
-            logger.error(f"获取【{comp_obj.comp_name}】额外信息失败 - {str(e)}", exc_info=True)
-            return False, f"获取【{comp_obj.comp_name}】额外信息失败", None
+            status, msg, data = False, f"【{comp_obj.comp_name}】额外信息获取失败", None
+            if mode != "silence":
+                logger.error(f"{msg} - {str(e)}", exc_info=True)
+
+        finally:
+            new_status = False if status and (data is None or data == '无法获取') else status
+            self.send_notify(comp_obj=comp_obj, status=new_status, msg=msg, method_name='extra_info', mode=mode)
+            return status, msg, data
 
     """ 插件调用栈检测 """
 
@@ -1057,7 +1130,8 @@ class CloudHelperPlus(_PluginBase):
                 continue
             if stack.function != function_name:
                 continue
-            if stack.filename.endswith(f"{package_path}.py") or stack.filename.endswith(f"{package_path}{os.sep}__init__.py"):
+            if stack.filename.endswith(f"{package_path}.py") or stack.filename.endswith(
+                    f"{package_path}{os.sep}__init__.py"):
                 return True
         return False
 
@@ -1079,7 +1153,7 @@ class CloudHelperPlus(_PluginBase):
             return ""
         str_data = ""
         for k, v in value.items():
-            str_data += f"{k}={v}; "
+            str_data += f"{k}={v};"
         return str_data.strip()
 
     @staticmethod
@@ -1091,7 +1165,8 @@ class CloudHelperPlus(_PluginBase):
             return {}
         value = value.strip()
         if isinstance(value, str):
-            pairs = value.split(';')
+            # 自定义分割符
+            pairs = value.split(";")
             data_dict = {}
             for pair in pairs:
                 key_value = pair.split('=')
@@ -1104,8 +1179,12 @@ class CloudHelperPlus(_PluginBase):
                     except json.JSONDecodeError:
                         data_dict[key] = value
             return data_dict
+
         elif value.startswith('{') and value.endswith('}'):
+            value = value.replace('\n', '')
+            value = json.loads(value)
             return value
+
         else:
             raise Exception("传入的参数格式错误，无法转换")
 
@@ -1115,3 +1194,74 @@ class CloudHelperPlus(_PluginBase):
         获取key前缀
         """
         return f"{comp_key}_"
+
+    """ 通知推送 """
+
+    def send_notify(self, comp_obj, status: bool, msg, method_name, mode: str):
+        """
+        发送通知
+        :param comp_obj: 组件
+        :param status: 状态
+        :param msg: 消息体
+        :param method_name: 调用方法
+        :param mode: 调用模式
+        """
+        with Lock:
+            try:
+                if mode == "silence":
+                    return True
+
+                config = self.__config or {}
+                if config and status is not None:
+                    comp_api_notify_enable = config.get(self.__get_key_prefix(comp_obj.comp_key) + "api_notify_enable")
+                    comp_notify_level = config.get(self.__get_key_prefix(comp_obj.comp_key) + "notify_level")
+                    comp_notify_type = config.get(self.__get_key_prefix(comp_obj.comp_key) + "notify_type")
+                    comp_notify_methods = config.get(self.__get_key_prefix(comp_obj.comp_key) + "notify_methods")
+                    title = f"{self.plugin_name} - {comp_obj.comp_name}"
+
+                    if mode == "api" and not comp_api_notify_enable:
+                        logger.info(f"【{comp_obj.comp_name}】API通知关闭，不汇报结果")
+                    else:
+                        if comp_notify_level == "off":
+                            logger.info(f"【{comp_obj.comp_name}】通知关闭，不汇报结果")
+                        else:
+                            # 将method_name转换为中文
+                            name = self.__method_map.get(method_name, method_name)
+                            if method_name in comp_notify_methods:
+                                if comp_notify_level == "err" and status is False:
+                                    self.post_message(mtype=getattr(NotificationType, comp_notify_type, NotificationType.Plugin.value),
+                                                      title=title,
+                                                      text=msg)
+                                    logger.info(f"【{comp_obj.comp_name}】 - 【{name}】消息汇报成功")
+                                elif comp_notify_level == "err" and status is True:
+                                    logger.info(f"【{comp_obj.comp_name}】 - 【{name}】不需要汇报")
+                                elif comp_notify_level == "all":
+                                    self.post_message(mtype=getattr(NotificationType, comp_notify_type, NotificationType.Plugin.value),
+                                                      title=title,
+                                                      text=msg)
+                                    logger.info(f"【{comp_obj.comp_name}】 - 【{name}】消息汇报成功")
+                                else:
+                                    logger.warning(f"【{comp_obj.comp_name}】- 【{name}】无法判断是否需要汇报")
+                            else:
+                                logger.warning(f"【{comp_obj.comp_name}】 - 【{name}】不在允许的模块通知列表中")
+                    return True
+                else:
+                    raise Exception(f"通知发送失败"
+                                    f"{'，没有配置' if not config else ''}"
+                                    f"{'，状态为空，无法判断' if status is None else ''}")
+            except Exception as e:
+                logger.error(f"发送通知异常 - {str(e)}", exc_info=True)
+                return False
+
+    @property
+    def __method_map(self):
+        """
+        方法映射名字
+        """
+        return {
+            'query_params': '查询认证参数',
+            'update_params': '更新认证参数',
+            'delete_params': '删除认证参数',
+            'check_params': '认证活性检测',
+            'extra_info': '获取额外信息',
+        }

@@ -26,10 +26,12 @@ class RclonePanHelper(CloudDisk):
     # 配置相关
     # 组件缺省配置
     config_default: Dict[str, Any] = {
-        "notify_enabled": False,
+        "notify_level": "off",
         "notify_type": "Plugin",
         "corn": 0,
         "params": "",
+        "api_notify_enable": False,
+        "notify_methods": [],
     }
 
     def init_comp(self):
@@ -60,12 +62,18 @@ class RclonePanHelper(CloudDisk):
             try:
                 if __check_version():
                     if Version(self.app_version) >= Version("v2.0.0"):
+                        from app.helper.storage import StorageHelper as SystemConfig
                         from app.modules.filemanager.storages.rclone import Rclone as Helper
-                        from app.schemas.types import StorageSchema as ParamsKey
+                        from app.schemas.types import StorageSchema as SystemConfigKey
+
+                        self.systemconfig_key = SystemConfigKey.Rclone
+
                     else:
                         raise Exception(f"不支持的系统版本【{self.app_version}】")
+
+                    self.systemconfig_method = SystemConfig()
                     self.helper = Helper()
-                    self.params_key = ParamsKey
+
                     return True
                 else:
                     return False
@@ -83,7 +91,9 @@ class RclonePanHelper(CloudDisk):
         # 默认配置
         default_config = {}
         if self.authorization:
-            data = self.query_params(comp_name=self.comp_name, system_config_key=self.system_config_key)
+            data = self.query_params(comp_name=self.comp_name,
+                                     comp_systemconfig_method=self.systemconfig_method,
+                                     comp_systemconfig_key=self.systemconfig_key)
             self.config_default["params"] = self.valid_auth_params_str(auth_params=data)
         # 合并默认配置
         default_config.update(self.config_default)
@@ -143,16 +153,6 @@ class RclonePanHelper(CloudDisk):
             ]
         }
 
-    @property
-    def system_config_key(self) -> str:
-        """
-        获取系统配置键
-        """
-        if Version(self.app_version) >= Version("v2.0.0"):
-            return self.params_key.U115
-        else:
-            raise Exception(f"不支持的系统版本【{self.app_version}】")
-
     def check_params(self):
         """
         认证检测方法
@@ -166,6 +166,9 @@ class RclonePanHelper(CloudDisk):
         """
         获取额外信息方法
         """
-        value = self.get_params_value(comp_name=self.comp_name, system_config_key=self.system_config_key, key='UID')
+        value = self.get_params_value(comp_name=self.comp_name,
+                                      comp_systemconfig_method=self.systemconfig_method,
+                                      comp_systemconfig_key=self.systemconfig_key,
+                                      key='UID')
         if value == "无法获取" or value == "未绑定":
             return value
