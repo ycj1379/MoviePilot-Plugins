@@ -73,7 +73,7 @@ class CloudDisk(ABC):
         # 系统次版本
         self.minor_version = int(version[1])
         # 系统修订版本
-        self.revision_version = int(version[2])
+        self.revision_version = int(version[2].split('-')[0]) if '-' in version[2] else int(version[2])
         # 特殊版本后缀
         self.revision_version_count = self.app_version.split('-')[1] if '-' in self.app_version else 0
 
