@@ -31,7 +31,7 @@ class CloudHelperPlus(_PluginBase):
     # 插件图标
     plugin_icon = "Alidrive_A.png"
     # 插件版本
-    plugin_version = "2.3"
+    plugin_version = "2.3.1"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -1227,7 +1227,9 @@ class CloudHelperPlus(_PluginBase):
                         else:
                             # 将method_name转换为中文
                             name = self.__method_map.get(method_name, method_name)
-                            if method_name in comp_notify_methods:
+                            if method_name in comp_notify_methods or not comp_notify_methods:
+                                if not comp_notify_methods:
+                                    logger.warning(f"【{comp_obj.comp_name}】 - 没有设置允许汇报的调用方法，默认全部模块都可汇报")
                                 if comp_notify_level == "err" and status is False:
                                     self.post_message(mtype=getattr(NotificationType, comp_notify_type, NotificationType.Plugin.value),
                                                       title=title,
