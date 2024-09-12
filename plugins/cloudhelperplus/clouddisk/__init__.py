@@ -65,17 +65,19 @@ class CloudDisk(ABC):
         self.eventmanager = EventManager()
 
         # 系统版本
-        self.app_version = APP_VERSION
-        version = self.app_version.split('.')
+        app_version = APP_VERSION
+        # 系统版本，忽略特殊后缀
+        self.app_version = app_version.split('-')[0]
         # 系统主版本
-        self.major_version = int(
-            version[0][1:] if not self.app_version[0].isdigit() else self.app_version.split('.')[0])
+        self.major_version = int(self.app_version[1:].split('.')[0])
         # 系统次版本
-        self.minor_version = int(version[1])
-        # 系统修订版本
-        self.revision_version = int(version[2].split('-')[0]) if '-' in version[2] else int(version[2])
-        # 特殊版本后缀
-        self.revision_version_count = self.app_version.split('-')[1] if '-' in self.app_version else 0
+        self.minor_version = int(self.app_version[1:].split('.')[1]) or 0
+        # 系统补丁版本
+        self.patch_version = int(self.app_version[1:].split('.')[2]) or 0
+        # 系统特殊版本
+        self.special_suffix = app_version[1:].split('.')[2].split('-')[1] if '-' in app_version[1:].split('.')[2] else 0
+        # 全部版本
+        self.full_version = app_version
 
         if not plugin:
             raise Exception("组件实例化错误")

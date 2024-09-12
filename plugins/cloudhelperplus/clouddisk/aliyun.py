@@ -76,7 +76,7 @@ class AliyunPanHelper(CloudDisk):
 
                     elif Version(self.app_version) >= Version("v2.0.0"):
                         from app.helper.storage import StorageHelper as SystemConfig
-                        from app.modules.filemanager.storages.alipan import Alipan as Helper
+                        from app.modules.filemanager.storages.alipan import AliPan as Helper
                         from app.schemas.types import StorageSchema as SystemConfigKey
 
                         self.systemconfig_key = SystemConfigKey.Alipan

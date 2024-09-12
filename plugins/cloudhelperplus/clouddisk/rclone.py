@@ -145,7 +145,9 @@ class RclonePanHelper(CloudDisk):
                             'props': {
                                 'type': 'info',
                                 'variant': 'tonal',
-                                'text': '',
+                                'style': 'white-space: pre-line;',
+                                'text': '注意：\n'
+                                        '1、建议使用官方自带的rclone挂载，本插件会将json格式转换成srt作为显示。\n',
                             }
                         }
                     ]
@@ -158,7 +160,7 @@ class RclonePanHelper(CloudDisk):
         认证检测方法
         """
         if Version(self.app_version) >= Version("v2.0.0"):
-            return self.helper.list()
+            return self.helper.check()
         else:
             raise Exception(f"不支持的系统版本【{self.app_version}】")
 
@@ -166,9 +168,10 @@ class RclonePanHelper(CloudDisk):
         """
         获取额外信息方法
         """
-        value = self.get_params_value(comp_name=self.comp_name,
-                                      comp_systemconfig_method=self.systemconfig_method,
-                                      comp_systemconfig_key=self.systemconfig_key,
-                                      key='UID')
-        if value == "无法获取" or value == "未绑定":
-            return value
+        # value = self.get_params_value(comp_name=self.comp_name,
+        #                               comp_systemconfig_method=self.systemconfig_method,
+        #                               comp_systemconfig_key=self.systemconfig_key,
+        #                               key='UID')
+        # if value == "无法获取" or value == "未绑定":
+        #     return value
+        return "暂不支持获取"
