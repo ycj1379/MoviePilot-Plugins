@@ -44,6 +44,24 @@ class CloudDisk(ABC):
         # "notify_methods": [],
     }
 
+    # 允许执行的方法
+    method_type: Dict[str, Any] = {
+        # "query_params": False,
+        # "update_params": False,
+        # "delete_params": False,
+        # "check_params": False,
+        # "extra_info": False,
+    }
+
+    # 方法名字转换
+    method_name = {
+        'query_params': '查询认证',
+        'update_params': '更新认证',
+        'delete_params': '删除认证',
+        'check_params': '认证活性检测',
+        'extra_info': '获取额外信息',
+    }
+
     helper = None
     systemconfig_key = None
     systemconfig_method = None
@@ -204,7 +222,7 @@ class CloudDisk(ABC):
             'props': {
                 'model': 'notify_level',
                 'label': '发送消息汇报',
-                'hint': '发送频率',
+                'hint': '控制需要汇报的消息等级',
                 'persistent-hint': True,
                 'active': True,
                 'items': [
@@ -291,20 +309,20 @@ class CloudDisk(ABC):
             }
         }
 
-    @property
-    def __build_notify_methods_select_items(self) -> List[dict]:
+    def __build_notify_methods_select_items(self, method_type) -> List[dict]:
         """
-        构造时间选择选项
+        构造调用方法选择选项
         """
-        return [
-            {'title': '查询认证', 'value': "query_params"},
-            {'title': '更新认证', 'value': "update_params"},
-            {'title': '删除认证', 'value': "delete_params"},
-            {'title': '认证活性检测', 'value': "check_params"},
-            {'title': '获取额外信息', 'value': "extra_info"},
-        ]
+        items = []
+        if not method_type:
+            return items
 
-    def __build_notify_methods_select_element(self) -> dict:
+        for key, value in method_type.items():
+            if value and key in self.method_name:
+                items.append({'title': self.method_name.get(key), 'value': key})
+        return items
+
+    def __build_notify_methods_select_element(self, method_type) -> dict:
         """
         构造时间选择器元素
         """
@@ -320,7 +338,7 @@ class CloudDisk(ABC):
                 'chips': True,
                 'clearable': True,
                 'placeholder': '留空，默认允许全部',
-                'items': self.__build_notify_methods_select_items,
+                'items': self.__build_notify_methods_select_items(method_type=method_type),
             }
         }
 
@@ -344,7 +362,7 @@ class CloudDisk(ABC):
         }
 
     @staticmethod
-    def build_col_element(element, md=4) -> dict:
+    def build_col_element(element, method_type=None, md=4) -> dict:
         """
         构造Col元素
         """
@@ -354,10 +372,10 @@ class CloudDisk(ABC):
                 'cols': 12,
                 'md': md,
             },
-            'content': [element()]
+            'content': [element(method_type=method_type) if method_type else element()]
         }
 
-    def build_base_settings_select_and_switch_row_element(self, md=4) -> dict:
+    def build_base_settings_select_and_switch_row_element(self, method_type=None, md=4) -> dict:
         """
         构建通用基础设置
         """
@@ -371,7 +389,9 @@ class CloudDisk(ABC):
                 self.build_col_element(self.__build_notify_type_select_element, md=md),
                 self.build_col_element(self.__build_corn_select_element, md=md),
                 self.build_col_element(self.__build_api_notify_enable_switch_element, md=md),
-                self.build_col_element(self.__build_notify_methods_select_element, md=md if md * 2 > 12 else md * 2),
+                self.build_col_element(self.__build_notify_methods_select_element,
+                                       method_type=method_type,
+                                       md=md if md * 2 > 12 else md * 2),
             ]
         }
 

@@ -23,6 +23,15 @@ class AliyunPanHelper(CloudDisk):
     # 组件跳过版本
     comp_skip_version: List[str] = []
 
+    # 允许执行的方法
+    method_type: Dict[str, Any] = {
+        "query_params": True,
+        "update_params": True,
+        "delete_params": True,
+        "check_params": True,
+        "extra_info": True,
+    }
+
     # 配置相关
     # 组件缺省配置
     config_default: Dict[str, Any] = {
@@ -113,12 +122,16 @@ class AliyunPanHelper(CloudDisk):
         # 允许运行
         if self.authorization:
             # 基础设置开关
-            base_settings = self.build_base_settings_select_and_switch_row_element()
+            base_settings = self.build_base_settings_select_and_switch_row_element(method_type=self.method_type)
             # params显示
             base_settings_cookie = self.build_base_settings_textarea_row_element_with_cookie(md=12,
                                                                                              placeholder=self.__cookie_placeholder)
             statement = self.__statement
-            elements = [base_settings, base_settings_cookie, statement]
+            elements = [
+                base_settings,
+                base_settings_cookie,
+                statement
+            ]
         else:
             elements = [self.build_not_supported_div_row_element()]
         # 处理缺省配置

@@ -23,13 +23,22 @@ class RclonePanHelper(CloudDisk):
     # 组件跳过版本
     comp_skip_version: List[str] = []
 
+    # 允许执行的方法
+    method_type: Dict[str, Any] = {
+        "query_params": False,
+        "update_params": False,
+        "delete_params": False,
+        "check_params": True,
+        "extra_info": False,
+    }
+
     # 配置相关
     # 组件缺省配置
     config_default: Dict[str, Any] = {
         "notify_level": "off",
         "notify_type": "Plugin",
         "corn": 0,
-        "params": "",
+        # "params": "",
         "api_notify_enable": False,
         "notify_methods": [],
     }
@@ -94,33 +103,68 @@ class RclonePanHelper(CloudDisk):
             data = self.query_params(comp_name=self.comp_name,
                                      comp_systemconfig_method=self.systemconfig_method,
                                      comp_systemconfig_key=self.systemconfig_key)
-            self.config_default["params"] = self.valid_auth_params_str(auth_params=data)
         # 合并默认配置
         default_config.update(self.config_default)
         # 允许运行
         if self.authorization:
             # 基础设置开关
-            base_settings = self.build_base_settings_select_and_switch_row_element()
+            base_settings = self.build_base_settings_select_and_switch_row_element(method_type=self.method_type)
             # params显示
-            base_settings_cookie = self.build_base_settings_textarea_row_element_with_cookie(md=12,
-                                                                                             placeholder=self.__cookie_placeholder)
+            # base_settings_cookie = self.build_base_settings_textarea_row_element_with_json(md=12,
+            #                                                                                placeholder=self.__cookie_placeholder)
+
             statement = self.__statement
-            elements = [base_settings, base_settings_cookie, statement]
+            elements = [
+                base_settings,
+                # base_settings_cookie,
+                statement
+            ]
         else:
             elements = [self.build_not_supported_div_row_element()]
         # 处理缺省配置
         self.save_default_config()
         return elements, default_config
 
-    @property
-    def __cookie_placeholder(self):
-        """
-        cookie 输入格式占位符
-        """
-        placeholder = {
-            'text': ''
-        }
-        return placeholder.get('text')
+    # @staticmethod
+    # def build_base_settings_textarea_row_element_with_json() -> dict:
+    #     """
+    #     构建通用基础cookie设置
+    #     """
+    #     return {
+    #         'component': 'VRow',
+    #         'props': {
+    #             'align': 'center'
+    #         },
+    #         'content': [
+    #             {
+    #                 'component': 'VCol',
+    #                 'props': {
+    #                     'cols': 12,
+    #                 },
+    #                 'content': [
+    #                     {
+    #                         'component': 'VAceEditor',
+    #                         'props': {
+    #                             'modelvalue': 'params',
+    #                             'lang': 'json',
+    #                             'theme': 'monokai',
+    #                             'style': 'height: 20rem; font-size: 14px;',
+    #                         }
+    #                     }
+    #                 ]
+    #             }
+    #         ]
+    #     }
+    #
+    # @property
+    # def __cookie_placeholder(self):
+    #     """
+    #     cookie 输入格式占位符
+    #     """
+    #     placeholder = {
+    #         'text': ''
+    #     }
+    #     return placeholder.get('text')
 
     @property
     def __statement(self) -> dict:
@@ -147,7 +191,7 @@ class RclonePanHelper(CloudDisk):
                                 'variant': 'tonal',
                                 'style': 'white-space: pre-line;',
                                 'text': '注意：\n'
-                                        '1、建议使用官方自带的rclone挂载，本插件会将json格式转换成srt作为显示。\n',
+                                        '1、请使用官方自带的Rclone网盘进行挂载，本插件暂时只为Rclone认证提供活性检测功能。',
                             }
                         }
                     ]

@@ -31,7 +31,7 @@ class CloudHelperPlus(_PluginBase):
     # 插件图标
     plugin_icon = "Alidrive_A.png"
     # 插件版本
-    plugin_version = "2.5"
+    plugin_version = "2.6"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -51,8 +51,8 @@ class CloudHelperPlus(_PluginBase):
     # 配置相关
     __config_default: Dict[str, Any] = {
         "enable": False,
-        "component_size": "off",
-        "dashboard_type": [],
+        # "component_size": "off",
+        # "dashboard_type": [],
     }
     # 用户提交配置
     __config: Dict[str, Any] = {}
@@ -246,7 +246,7 @@ class CloudHelperPlus(_PluginBase):
                                 'props': {
                                     'model': 'enable',
                                     'label': '启用插件',
-                                    'hint': '激活定时功能，允许检查云盘状态',
+                                    'hint': '激活全局定时功能，允许检查云盘状态',
                                     'persistent-hint': True,
                                 }
                             }
@@ -862,11 +862,20 @@ class CloudHelperPlus(_PluginBase):
         if not page_info:
             page_info = [
                 {
-                    'component': 'div',
-                    'text': '暂无数据',
+                    'component': 'VCol',
                     'props': {
-                        'class': 'text-center',
-                    }
+                        'cols': 12,
+                        'md': 12,
+                    },
+                    'content': [
+                        {
+                            'component': 'div',
+                            'text': '暂无数据',
+                            'props': {
+                                'class': 'text-center',
+                            }
+                        }
+                    ]
                 }
             ]
         return page_info
@@ -921,24 +930,47 @@ class CloudHelperPlus(_PluginBase):
 
             comp_obj = self.__comp_objs.get(comp_key, None)
             if not comp_obj:
-                return False, f"【{comp_key}】组件实例不存在", None
+                msg = f"【{comp_key}】组件实例不存在"
+                logger.error(msg)
+                return False, msg , None
 
-            if comp_obj.comp_key not in self.__allow_cloud:
-                return False, f"当前插件不支持使用【{comp_obj.comp_key}】", None
+            comp_name = comp_obj.comp_name or comp_key
+
+            if comp_key not in self.__allow_cloud:
+                msg = f"当前插件不支持使用【{comp_name}】"
+                logger.warning(msg)
+                return False, msg, None
 
             if not method:
-                return False, "调用方法为空", None
+                msg = "调用方法为空"
+                logger.error(msg)
+                return False, msg, None
 
-            if hasattr(comp_obj, method) and self.__is_pass_function(getattr(comp_obj, method)):
-                return False, f"【{comp_obj.comp_name if comp_obj.comp_name else comp_obj.comp_key}】组件方法【{method}】未实现", None
+            method_name = comp_obj.method_name.get(method)
+
+            if comp_obj.method_type:
+                if not comp_obj.method_type.get(method):
+                    msg = f"【{comp_name}】组件不支持运行【{method_name}】"
+                    logger.warning(msg)
+                    return False, msg, None
+            else:
+                msg = f"【{comp_name}】组件方法启用名单未定义，无法判断是否允许调用【{method_name}】"
+                logger.error(msg)
+                return False, msg, None
+
+            if hasattr(self, method) and self.__is_pass_function(getattr(self, method)):
+                msg = f"【{comp_name}】组件调用的方法【{method_name}】未实现"
+                logger.error(msg)
+                return False, msg, None
 
             target_method = getattr(self, method)
             status, msg, data = target_method(comp_obj=comp_obj, params=params, mode=mode) \
                 if method == 'update_params' else target_method(comp_obj=comp_obj, mode=mode)
 
         except Exception as e:
-            logger.error(f"调用组件方法异常 - {str(e)}", exc_info=True)
-            return False, f"调用组件方法异常 - {str(e)}", None
+            msg = f"调用组件方法异常 - {str(e)}"
+            logger.error(msg, exc_info=True)
+            return False, msg, None
 
         else:
             # 成功更新，调用一次显示更新与检查
@@ -1226,7 +1258,7 @@ class CloudHelperPlus(_PluginBase):
                             logger.info(f"【{comp_obj.comp_name}】通知关闭，不汇报结果")
                         else:
                             # 将method_name转换为中文
-                            name = self.__method_map.get(method_name, method_name)
+                            name = comp_obj.method_name.get(method_name, method_name)
                             if method_name in comp_notify_methods or not comp_notify_methods:
                                 if not comp_notify_methods:
                                     logger.warning(f"【{comp_obj.comp_name}】 - 没有设置允许汇报的调用方法，默认全部模块都可汇报")
@@ -1254,16 +1286,3 @@ class CloudHelperPlus(_PluginBase):
             except Exception as e:
                 logger.error(f"发送通知异常 - {str(e)}", exc_info=True)
                 return False
-
-    @property
-    def __method_map(self):
-        """
-        方法映射名字
-        """
-        return {
-            'query_params': '查询认证参数',
-            'update_params': '更新认证参数',
-            'delete_params': '删除认证参数',
-            'check_params': '认证活性检测',
-            'extra_info': '获取额外信息',
-        }
