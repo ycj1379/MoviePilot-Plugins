@@ -25,7 +25,7 @@ class RclonePanHelper(CloudDisk):
 
     # 允许执行的方法
     method_type: Dict[str, Any] = {
-        "query_params": False,
+        "query_params": True,
         "update_params": False,
         "delete_params": False,
         "check_params": True,

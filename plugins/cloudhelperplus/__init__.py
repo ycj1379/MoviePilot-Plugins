@@ -31,7 +31,7 @@ class CloudHelperPlus(_PluginBase):
     # 插件图标
     plugin_icon = "Alidrive_A.png"
     # 插件版本
-    plugin_version = "2.6"
+    plugin_version = "2.7"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -124,7 +124,7 @@ class CloudHelperPlus(_PluginBase):
             text.append(comp_key)
 
         if text:
-            text = '支持的云盘id:' + ', '.join(text)
+            text = '支持的云盘id：' + ', '.join(text)
         else:
             text = '当前没有支持的云盘'
 
@@ -958,11 +958,6 @@ class CloudHelperPlus(_PluginBase):
                 logger.error(msg)
                 return False, msg, None
 
-            if hasattr(self, method) and self.__is_pass_function(getattr(self, method)):
-                msg = f"【{comp_name}】组件调用的方法【{method_name}】未实现"
-                logger.error(msg)
-                return False, msg, None
-
             target_method = getattr(self, method)
             status, msg, data = target_method(comp_obj=comp_obj, params=params, mode=mode) \
                 if method == 'update_params' else target_method(comp_obj=comp_obj, mode=mode)
@@ -1048,7 +1043,7 @@ class CloudHelperPlus(_PluginBase):
                 comp_obj.systemconfig_method.set_storage(storage=comp_obj.systemconfig_key.value, conf={})
             else:
                 raise Exception(f"当前版本【{comp_obj.app_version}】不支持")
-            status, msg, data = True, "【{comp_obj.comp_name}】认证参数删除成功", None
+            status, msg, data = True, f"【{comp_obj.comp_name}】认证参数删除成功", None
             if mode != "silence":
                 logger.info(msg)
 
