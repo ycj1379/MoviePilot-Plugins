@@ -47,7 +47,7 @@
         "level": 1,
         "v2": true,
         "history": {
-          "v1.3": "增加：支持v2+使用；问题反馈快捷跳转。修复：保存消息的功能混乱。优化：部分文案描述。",
+          "v1.3": "增加：支持v2.0+使用；问题反馈快捷跳转。修复：保存消息的功能混乱。优化：部分文案描述。",
           "v1.2": "增加：消息渠道支持多选；用户ID支持多选，支持自定义输入，支持一键选择；支持 link 变量；支持单渠道发送多用户。优化：重构定时任务逻辑。",
           "v1.1": "增加：支持定时发送功能。",
           "v1.0": "增加：支持手动发送自定义消息。"
@@ -56,12 +56,14 @@
     "MqttClient": {
         "name": "MQTT消息交互",
         "description": "可接入HomeAssistant，支持使用智能家居设备，汇报状态信息。",
-        "version": "0.2",
+        "version": "0.3",
         "labels": "消息通知",
         "icon": "Ha_A.png",
         "author": "Aqr-K",
         "level": 1,
+        "v2": true,
         "history": {
+          "v0.3": "增加：支持v2.0+使用。",
           "v0.2": "优化：部分错误文案，部分UI的聚焦显示。",
           "v0.1": "增加：支持使用MQTT协议发送消息通知。"
         }
@@ -114,12 +116,14 @@
     "DingTalkBotMsg": {
         "name": "钉钉机器人消息通知",
         "description": "支持使用钉钉群聊机器人发送消息通知。",
-        "version": "1.5",
+        "version": "1.6",
         "labels": "消息通知",
         "icon": "https://raw.githubusercontent.com/Aqr-K/MoviePilot-Plugins/main/icons/dingtalk.png",
         "author": "Aqr-K",
         "level": 1,
+        "v2": true,
         "history": {
+            "v1.6": "增加：支持v2.0+使用。修复：作者名大小写不统一。",
             "v1.5": "修复：插件图标不显示。",
             "v1.4": "修复：部分文案不显示。",
             "v1.3": "增加：图片发送开关；允许快捷清除配置。优化：UI界面选项描述。",
@@ -129,12 +133,14 @@
     "ServerChanMsg": {
         "name": "Server酱消息通知",
         "description": "支持使用Server酱发送消息通知。",
-        "version": "1.1",
+        "version": "1.2",
         "labels": "消息通知",
         "icon": "https://raw.githubusercontent.com/Aqr-K/MoviePilot-Plugins/main/icons/ServerChan.png",
         "author": "Aqr-K",
         "level": 1,
+        "v2": true,
         "history": {
+          "v1.2": "增加：支持v2.0+使用。",
           "v1.1": "修复：部分错误文案。增加：支持端对端加密模式；图片消息支持。优化：修改为post请求。",
           "v1.0": "增加：支持使用Server酱发送消息通知。"
         }
