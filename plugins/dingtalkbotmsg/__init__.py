@@ -19,9 +19,9 @@ class DingTalkBotMsg(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/Aqr-K/MoviePilot-Plugins/main/icons/dingtalk.png"
     # 插件版本
-    plugin_version = "1.5"
+    plugin_version = "1.6"
     # 插件作者
-    plugin_author = "Aqr-k"
+    plugin_author = "Aqr-K"
     # 作者主页
     author_url = "https://github.com/Aqr-k"
     # 插件配置项ID前缀
