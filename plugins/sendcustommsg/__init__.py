@@ -5,6 +5,7 @@ from typing import Any, List, Dict, Tuple
 
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
+# from packaging.version import Version
 
 from app.core.config import settings
 from app.db import SessionFactory
@@ -24,7 +25,7 @@ class SendCustomMsg(_PluginBase):
     # 插件图标
     plugin_icon = "Synomail_A.png"
     # 插件版本
-    plugin_version = "1.2"
+    plugin_version = "1.3"
     # 插件作者
     plugin_author = "Aqr-K"
     # 作者主页
@@ -83,6 +84,14 @@ class SendCustomMsg(_PluginBase):
             self._link = config.get("link", None)
 
         self.run()
+
+    @property
+    def __version(self):
+        """
+        版本识别
+        """
+        version = settings.VERSION_FLAG if hasattr(settings, 'VERSION_FLAG') else "v1"
+        return version
 
     def get_state(self):
         return self._enabled_scheduled_sends_msg
@@ -224,7 +233,7 @@ class SendCustomMsg(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 6,
+                                    'md': 3,
                                 },
                                 'content': [
                                     {
@@ -238,6 +247,39 @@ class SendCustomMsg(_PluginBase):
                                     }
                                 ]
                             },
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 3,
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'warning',
+                                            'variant': 'tonal',
+                                            'style': 'white-space: pre-line;',
+                                            'text': '问题反馈：'
+                                        },
+                                        'content': [
+                                            {
+                                                'component': 'a',
+                                                'props': {
+                                                    'href': 'https://github.com/Aqr-K/MoviePilot-Plugins/issues/new',
+                                                    'target': '_blank'
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'u',
+                                                        'text': 'ISSUES'
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
                         ]
                     },
                     {
@@ -256,9 +298,14 @@ class SendCustomMsg(_PluginBase):
                                     {
                                         'component': 'VAlert',
                                         'props': {
-                                            'type': 'warning',
+                                            'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '注意：已经成功启用定时发送任务后，需要重新修改发生配置，但清除定时时间并未设定的情况下，为了保护已经启动的定时任务，修改的配置将不会被更新保存！'
+                                            'style': 'white-space: pre-line;',
+                                            'text': '注意：\n'
+                                                    '1、消息主题和内容必须填写其中一项，否则无法发送自定义消息！\n'
+                                                    '2、同时启用定时任务与手动任务时，清除已有的定时任务，优先发送手动消息！\n'
+                                                    '3、当定时任务已启动，且未关闭的情况下修改参数，如果出现时间错误，将会抛弃本次设置还用原有配置！\n'
+                                                    '4、部分拥有白名单的渠道，请手动输入输入白名单的用户名，而不是mp的账号用户！'
                                         }
                                     }
                                 ]
@@ -351,7 +398,7 @@ class SendCustomMsg(_PluginBase):
                                             'placeholder': '支持下拉框多选，支持手动输入多个可选项以外参数，每输入一个参数请回车',
                                             'items': UserTypeOptions,
                                             "clearable": True,
-                                            'hint': '自定义用户ID',
+                                            'hint': '自定义用户ID，企业微信与tg请输入白名单内ID',
                                             'persistent-hint': True,
                                             'active': True,
                                         }
@@ -647,100 +694,114 @@ class SendCustomMsg(_PluginBase):
         """
         运行插件
         """
-        # 保存配置
-        if not self._enabled_scheduled_sends_msg:
-            if self._save:
-                if (not self._text
-                        and not self._title
-                        and not self._image
-                        and not self._link
-                        and not self._msg_type
-                        and not self._channel_type
-                        and not self._userid_type
-                        and not self._scheduled_sends_time
-                        and not self._only_send_once
-                        and not self._enabled_scheduled_sends_msg
-                        and not self._save):
-                    logger.info("插件初始化成功！")
-                else:
-                    self.__backup_config()
-                    logger.info("消息配置保存成功！")
+        # 未开启定时发送，但是存在定时任务，关闭定时任务
+        if not self._enabled_scheduled_sends_msg and self._scheduler:
+            self.stop_service()
+            logger.info("未开启定时发送，关闭定时任务！")
+
+        # 情况 1：当没有启用定时发送、手动发送且没有启用保存消息时，false false false
+        if not self._enabled_scheduled_sends_msg and not self._only_send_once and not self._save:
+            self.__default_config()
+            logger.info("插件初始化成功！")
+
+        # 情况 2：当没有启用定时发送、没有手动发送且启用保存消息时，false false true
+        elif not self._enabled_scheduled_sends_msg and not self._only_send_once and self._save:
+            self.__backup_config()
+            logger.info("保存当前配置成功！")
+
+        # 情况 3：当没有启用定时发送、启用手动发送且没有启用保存消息时，false true false
+        elif not self._enabled_scheduled_sends_msg and self._only_send_once and not self._save:
+            status = self._send_msg()
+            self.__default_config()
+            logger.info("手动发送完成，未启用保存，恢复默认配置！") if status \
+                else logger.warning("手动发送失败，未启用保存，恢复默认配置！")
+
+        # 情况 4：当没有启用定时发送、启用手动发送且启用保存消息时，false true true
+        elif not self._enabled_scheduled_sends_msg and self._only_send_once and self._save:
+            status = self._send_msg()
+            self.__backup_config()
+            logger.info("手动发送完成，已启用保存，保存当前配置！") if status \
+                else logger.warning("手动发送失败，已启用保存，保存当前配置！")
+
+        # 情况 5：当启用定时发送、没有启用手动发送且没有启用保存消息时，true false false
+        elif self._enabled_scheduled_sends_msg and not self._only_send_once and not self._save:
+            status = self._handle_scheduled_task()
+            if not status:
+                self._enabled_scheduled_sends_msg = False
+                self.__default_config()
             else:
-                if (not self._text
-                        and not self._title
-                        and not self._image
-                        and not self._link
-                        and not self._msg_type
-                        and not self._channel_type
-                        and not self._userid_type
-                        and not self._scheduled_sends_time
-                        and not self._only_send_once
-                        and not self._enabled_scheduled_sends_msg
-                        and not self._save):
-                    logger.info("插件初始化成功！")
-                else:
-                    self.__default_config()
-                    logger.warning("消息配置已清空！")
+                self.__backup_config()
+            logger.info("定时任务启动成功，未启用保存，激活保留消息按钮保存本次配置！") if status \
+                else logger.warning("定时任务启动失败，未启用保存，恢复默认配置！")
 
-        # 发送自定义消息
-        if self._only_send_once:
-            if self._text or self._title:
-                self._send_msg()
-                self._only_send_once = False
-                self.__update_config()
-            else:
-                msg = "消息主题和内容都是空的，必须填写其中一项，否则无法发送自定义消息！"
-                logger.warning(msg)
-                self.systemmessage.put(msg)
-                self._only_send_once = False
-                self.__update_config()
+        # 情况 6：当启用定时发送、没有启用手动发送且启用保存消息时，true false true
+        elif self._enabled_scheduled_sends_msg and not self._only_send_once and self._save:
+            status = self._handle_scheduled_task()
+            self.__backup_config()
+            if not status:
+                self._enabled_scheduled_sends_msg = False
+            logger.info("定时任务启动成功，已启用保存，保存当前配置！") if status \
+                else logger.warning("定时任务启动失败，已启用保存，保存当前配置！")
 
-        else:
-            # 定时发送消息
-            self._handle_scheduled_task()
+        # 情况 7：当同时启用定时任务与手动任务、没有启用保存消息时，true true false
+        elif self._enabled_scheduled_sends_msg and self._only_send_once and not self._save:
+            self._enabled_scheduled_sends_msg = False
 
+            # 检查定时任务是否存在，并清除
+            if self._scheduler:
+                self.stop_service()
+                self._scheduler = None
+            logger.warning("同时启用定时和手动任务，关闭定时任务，优先发送手动消息！")
+
+            status = self._send_msg()
+            self.__default_config()
+            logger.info("手动发送完成，未启用保存，清除当前配置！") if status \
+                else logger.warning("手动发送失败，未启用保存，清除当前配置！")
+
+        # 情况 8：当同时启用定时任务与手动任务、启用保存消息时，true true true
+        elif self._enabled_scheduled_sends_msg and self._only_send_once and self._save:
+            self._enabled_scheduled_sends_msg = False
+
+            # 检查定时任务是否存在，并清除
+            if self._scheduler:
+                self.stop_service()
+                self._scheduler = None
+            logger.warning("同时启用定时和手动任务，关闭定时任务，优先发送手动消息！")
+
+            status = self._send_msg()
+            self.__backup_config()
+            logger.info("手动发送完成，已启用保存，保存当前配置！") if status \
+                else logger.warning("手动发送失败，已启用保存，保存当前配置！")
+
+        self.__update_config()
     # 定时任务
 
-    def _handle_scheduled_task(self):
+    def _handle_scheduled_task(self) -> bool:
         """
         处理定时任务
         """
-        # 启动定时任务开关
-        if self._enabled_scheduled_sends_msg:
-            # 有定时时间
-            if self._scheduled_sends_time:
-                # 检查定时器合法性
-                if self.__convert_time_format():
-                    # 配置完整
-                    if self._title or self._text:
-                        self.__handle_existing_scheduler()
-                    else:
-                        self.__handle_incomplete_configuration()
-                else:
-                    self.__handle_invalid_timer()
-            else:
-                self.__handle_missing_timer()
-        else:
-            self.__handle_disabled_scheduler()
+        try:
+            timedata = self.__convert_time_format()
+            if not timedata:
+                self.__handle_invalid_timer()
+            # 处理消息主题和内容，不全时，按需处理
+            if not self.__handle_title_and_text():
+                self.__handle_incomplete_configuration()
+            self._scheduled_task(timedata=timedata)
+            return True
+        except Exception as e:
+            logger.error(f"定时任务启动失败 - {str(e)}")
+            return False
 
-    def __handle_existing_scheduler(self):
+    def __handle_title_and_text(self) -> bool:
         """
-        处理现有定时任务
+        处理消息主题和内容
         """
-        if self._scheduler:
-            self._scheduler.remove_all_jobs()
-            if self._save:
-                logger.info("定时任务已更新，重新加载定时任务！")
-            else:
-                logger.info("定时任务已更新，未启动保存配置，自动保存本次配置，重新启动定时任务！")
-        else:
-            if self._save:
-                logger.info("配置已保存，定时任务已启动！")
-            else:
-                logger.info("未启动保存配置，自动保存本次配置，定时任务已启动！")
-        self.__backup_config()
-        self.__update_config()
-        self._scheduled_task()
+        if not self._title and not self._text:
+            raise ValueError("消息主题和内容都是空的，必须填写其中一项，否则无法发送自定义消息！")
+        if self._title or self._text:
+            return True
+        return False
 
     def __handle_incomplete_configuration(self):
         """
@@ -748,16 +809,16 @@ class SendCustomMsg(_PluginBase):
         """
         if self._scheduler:
             self.__restore_config()
-            self.__update_config()
             msg = "消息主题和内容都是空的，必须填写其中一项，否则无法发送自定义消息！抛弃本次配置，恢复原配置，继续运行已存在的定时任务！"
         else:
             if self._save:
                 msg = "消息主题和内容都是空的，必须填写其中一项，否则无法发送自定义消息！保存已填写配置！"
+                self.__backup_config()
             else:
-                msg = "消息主题和内容都是空的，必须填写其中一项，否则无法发送自定义消息！未启动保存配置，抛弃本次消息配置！"
+                msg = "消息主题和内容都是空的，必须填写其中一项，否则无法发送自定义消息！未启用保存配置，抛弃本次消息配置！"
                 self.__default_config()
             self._enabled_scheduled_sends_msg = False
-            self.__update_config()
+        self.__update_config()
         logger.warning(msg)
         self.systemmessage.put(msg)
 
@@ -767,16 +828,16 @@ class SendCustomMsg(_PluginBase):
         """
         if self._scheduler:
             self.__restore_config()
-            self.__update_config()
             msg = "定时发送时间解析失败，无法更新定时任务！抛弃本次配置，恢复原配置！继续运行已存在的定时任务！"
         else:
             if self._save:
                 msg = "定时发送时间解析失败，无法启用定时任务！保存已填写配置！"
+                self.__backup_config()
             else:
-                msg = "定时发送时间解析失败，无法启用定时任务！未启动保存配置，抛弃本次消息配置！"
+                msg = "定时发送时间解析失败，无法启用定时任务！未启用保存配置，抛弃本次消息配置！"
                 self.__default_config()
             self._enabled_scheduled_sends_msg = False
-            self.__update_config()
+        self.__update_config()
         logger.warning(msg)
         self.systemmessage.put(msg)
 
@@ -786,36 +847,24 @@ class SendCustomMsg(_PluginBase):
         """
         if self._scheduler:
             self.__restore_config()
-            self.__update_config()
             msg = "已存在定时任务，当前配置缺少定时时间，抛弃本次消息配置，维持原有消息配置！"
         else:
             if self._save:
                 msg = "缺少定时时间，无法启用定时任务！保存已填写配置！"
+                self.__backup_config()
             else:
-                msg = "缺少定时时间，无法启用定时任务！未启动保存配置，抛弃本次消息配置！"
+                msg = "缺少定时时间，无法启用定时任务！未启用保存配置，抛弃本次消息配置！"
                 self.__default_config()
             self._enabled_scheduled_sends_msg = False
-            self.__update_config()
+        self.__update_config()
         logger.warning(msg)
         self.systemmessage.put(msg)
 
-    def __handle_disabled_scheduler(self):
+    def _scheduled_task(self, timedata):
         """
-        处理没有启动定时任务开关的情况
+        启用定时任务
         """
-        if self._scheduler:
-            self.stop_service()
-            logger.warning("取消定时发送任务！")
-
-    def _scheduled_task(self):
-        """
-        定时任务
-        """
-
-        if self._scheduled_sends_time:
-            # 转换时间格式
-            timedata = self.__convert_time_format()
-
+        try:
             if timedata:
                 # 启动定时任务
                 if not self._scheduler:
@@ -842,37 +891,40 @@ class SendCustomMsg(_PluginBase):
                 msg = "定时发送时间解析失败，无法启用定时任务！"
                 logger.error(msg)
                 self.systemmessage.put(f"{msg}")
-        else:
-            if self._scheduler:
-                msg = "定时发送时间为空，继续运行已存在的定时任务！"
-            else:
-                msg = "定时发送时间为空，无法启用定时任务！"
-            logger.warning(msg)
-            self.systemmessage.put(f"{msg}")
+        except Exception as e:
+            msg = f"定时发送任务启动失败"
+            logger.error(f"{msg} - {str(e)}", exc_info=True)
+            self.systemmessage.put(msg)
 
     def __convert_time_format(self):
         """
         转换时间格式
         """
         try:
-            # 解析时间格式，增加微秒
-            send_time = datetime.strptime(self._scheduled_sends_time, "%Y-%m-%dT%H:%M").replace(microsecond=1)
-            # 判断时间是否在当前时间之前
-            if send_time < datetime.now() + timedelta(seconds=3):
-                raise ValueError("输入了一个过期的时间")
-            logger.info(f"定时任务时间大于当前时间，允许添加定时发送任务！")
-            # 转换格式
-            timedata = pytz.timezone(settings.TZ).localize(send_time).isoformat(timespec='microseconds')
-            # 去除日期和时间之间的分隔符
-            timedata = timedata.replace("T", " ")
+            if not self._scheduled_sends_time:
+                if not self._scheduler:
+                    raise ValueError("定时发送时间为空！")
+                else:
+                    self.__handle_missing_timer()
+            else:
+                # 解析时间格式，增加微秒
+                send_time = datetime.strptime(self._scheduled_sends_time, "%Y-%m-%dT%H:%M").replace(microsecond=1)
+                # 判断时间是否在当前时间之前
+                if send_time < datetime.now() + timedelta(seconds=3):
+                    raise ValueError("输入了一个过期的时间")
+                logger.info(f"定时任务时间大于当前时间，允许添加定时发送任务！")
+                # 转换格式
+                timedata = pytz.timezone(settings.TZ).localize(send_time).isoformat(timespec='microseconds')
+                # 去除日期和时间之间的分隔符
+                timedata = timedata.replace("T", " ")
+                return timedata
         except Exception as e:
-            logger.error(f"时间格式转换失败 - {e}")
-            timedata = None
-        return timedata
+            logger.error(f"时间格式转换失败 - {str(e)}")
+            raise Exception(f"时间格式转换失败 - {str(e)}")
 
     # 发送消息
 
-    def _send_msg(self, scheduler=False):
+    def _send_msg(self, scheduler=False) -> bool:
         """
         发送自定义消息
         """
@@ -881,8 +933,8 @@ class SendCustomMsg(_PluginBase):
         msg = None
         try:
             if self._title or self._text:
-                channel_type = self._get_values(data=self._channel_type)
-                userid_type = self._get_values(data=self._userid_type, user_mode=True)
+                channel_type = self._get_values(self._channel_type)
+                userid_type = self._get_values(self._userid_type, user_mode=True)
 
                 if not channel_type and userid_type:
                     channels = [None]  # 没有渠道
@@ -904,19 +956,17 @@ class SendCustomMsg(_PluginBase):
                                       image=self._image,
                                       userid=userid,
                                       link=self._link)
-                    continue
-
-                msg = f"{log_type} - 自定义消息发送成功！"
-                logger.info(msg)
-            else:
-                msg = f"{log_type} - 主题和内容都是空的，必须填写其中一项，否则无法发送自定义消息！"
-                logger.warning(msg)
+                msg = "自定义消息发送成功！"
+                logger.info(f"【{log_type}】 - {msg}")
                 return True
+            else:
+                msg = "主题和内容都是空的，必须填写其中一项，否则无法发送自定义消息！"
+                logger.warning(f"【{log_type}】 -{msg}")
+                raise ValueError(msg)
         except Exception as e:
-            msg = f"{log_type} - 自定义消息发送失败！"
-            logger.error(f"{msg} - 错误 - {e}")
+            msg = "自定义消息发送失败"
+            logger.error(f"【{log_type}】 - {msg} - {str(e)}")
             return False
-
         finally:
             # 如果是定时任务，发送消息不管是否成功都，关闭定时任务
             if self._enabled_scheduled_sends_msg and scheduler is True:
@@ -924,30 +974,23 @@ class SendCustomMsg(_PluginBase):
                 self.__update_config()
                 self.stop_service()
                 logger.info("定时任务执行完毕，关闭定时任务！")
-                if not self._save:
-                    self.__default_config()
-                    self.__update_config()
-                    logger.info("定时任务执行完毕，清空当前的消息配置！")
-                else:
-                    logger.info("定时任务执行完毕，已启用消息保存功能，保留当前的消息配置！")
-
             if self._only_send_once and scheduler is False:
-                self.systemmessage.put(f"{msg}")
+                self.systemmessage.put(f"【{log_type}】 - {msg}")
 
     # 数据处理
 
     @staticmethod
-    def _get_values(data: list, user_mode=False) -> list:
+    def _get_values(list_type: list, user_mode=False) -> list:
         """
         数据处理
         """
         values = []
         values_set = set()
 
-        if not data:
+        if not list_type:
             return values
 
-        for item in data:
+        for item in list_type:
             if isinstance(item, dict) and 'value' in item:
                 value = item['value']
             else:
