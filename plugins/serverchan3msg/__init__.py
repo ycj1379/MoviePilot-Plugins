@@ -19,9 +19,9 @@ lock = threading.Lock()
 
 class ServerChanMsg(_PluginBase):
     # 插件名称
-    plugin_name = "Server酱消息通知"
+    plugin_name = "Server酱3消息通知"
     # 插件描述
-    plugin_desc = "支持使用Server酱发送消息通知。"
+    plugin_desc = "支持使用Server酱3发送消息通知。"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/Aqr-K/MoviePilot-Plugins/main/icons/ServerChan.png"
     # 插件版本
