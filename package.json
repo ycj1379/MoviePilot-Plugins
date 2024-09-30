@@ -130,8 +130,8 @@
             "v1.2": "增加：从支持使用钉钉群聊机器人发送消息通知。"
           }
     },
-    "ServerChanMsg": {
-        "name": "Server酱消息通知",
+    "ServerChan3Msg": {
+        "name": "Server酱3消息通知",
         "description": "支持使用Server酱发送消息通知。",
         "version": "1.2",
         "labels": "消息通知",
